@@ -26,24 +26,24 @@
         ]
       }
     },
-    "privacyPolicyUrl": "https://odobook-alexa.example.workers.dev/privacy",
-    "termsOfUseUrl": "https://odobook-alexa.example.workers.dev/terms",
+    "privacyPolicyUrl": "https://odobook-alexa.odobook-alexa.workers.dev/privacy",
+    "termsOfUseUrl": "https://odobook-alexa.odobook-alexa.workers.dev/terms",
     "category": "productivity",
     "distributionCountries": ["US", "AU"],
     "media": {
       "icons": {
         "light": {
-          "72": "https://odobook-alexa.example.workers.dev/assets/icon-72.png",
-          "64": "https://odobook-alexa.example.workers.dev/assets/icon-64.png",
-          "88": "https://odobook-alexa.example.workers.dev/assets/icon-88.png",
-          "126": "https://odobook-alexa.example.workers.dev/assets/icon-126.png",
-          "180": "https://odobook-alexa.example.workers.dev/assets/icon-180.png",
-          "241": "https://odobook-alexa.example.workers.dev/assets/icon-241.png"
+          "72": "https://odobook-alexa.odobook-alexa.workers.dev/assets/icon-72.png",
+          "64": "https://odobook-alexa.odobook-alexa.workers.dev/assets/icon-64.png",
+          "88": "https://odobook-alexa.odobook-alexa.workers.dev/assets/icon-88.png",
+          "126": "https://odobook-alexa.odobook-alexa.workers.dev/assets/icon-126.png",
+          "180": "https://odobook-alexa.odobook-alexa.workers.dev/assets/icon-180.png",
+          "241": "https://odobook-alexa.odobook-alexa.workers.dev/assets/icon-241.png"
         }
       },
       "carouselImages": [
         {
-          "uri": "https://odobook-alexa.example.workers.dev/assets/carousel-1.png",
+          "uri": "https://odobook-alexa.odobook-alexa.workers.dev/assets/carousel-1.png",
           "altText": "Odobook on an Echo Show: a work trip to Geelong running since 7:59 am, 52,310 km at the start, business use 88% this period."
         }
       ]
@@ -53,10 +53,10 @@
     {
       "type": "MCP",
       "config": {
-        "endpoints": { "default": "https://odobook-alexa.example.workers.dev/mcp" },
+        "endpoints": { "default": "https://odobook-alexa.odobook-alexa.workers.dev/mcp" },
         "authorization": {
           "type": "OAUTH2_AUTHORIZATION_CODE_PKCE",
-          "protectedResourceMetadata": "https://odobook-alexa.example.workers.dev/.well-known/oauth-protected-resource/mcp",
+          "protectedResourceMetadata": "https://odobook-alexa.odobook-alexa.workers.dev/.well-known/oauth-protected-resource/mcp",
           "scopes": ["logbook:read", "logbook:write"]
         }
       }

@@ -8,8 +8,11 @@
   "vars": {
     // The canonical public URL (the MCP resource is PUBLIC_URL + "/mcp"). Set to the workers.dev
     // URL after the first deploy; .dev.vars overrides it for local runs.
-    "PUBLIC_URL": "https://odobook-alexa.example.workers.dev"
+    "PUBLIC_URL": "https://odobook-alexa.odobook-alexa.workers.dev"
   },
-  "kv_namespaces": [{ "binding": "OAUTH_KV", "id": "00000000000000000000000000000000" }],
-  "d1_databases": [{ "binding": "DB", "database_name": "odobook", "database_id": "00000000-0000-0000-0000-000000000000" }]
+  // Run the Worker next to the database: a tool call makes several D1 queries, so this keeps each
+  // call to one long-haul round trip, wherever the caller is.
+  "placement": { "mode": "smart" },
+  "kv_namespaces": [{ "binding": "OAUTH_KV", "id": "3910cf1f4fc644fda6e3649c41b472c3" }],
+  "d1_databases": [{ "binding": "DB", "database_name": "odobook", "database_id": "dca55465-dcc2-4492-b4a1-b69774d3fea6" }]
 }
