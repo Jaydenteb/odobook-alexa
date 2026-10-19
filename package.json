@@ -1,0 +1,26 @@
+{
+  "name": "odobook-alexa",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Odobook: a voice car logbook (ATO 12-week logbook and IRS mileage log) as an MCP server built to the Alexa+ add-on requirements.",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test --experimental-strip-types test/*.test.ts",
+    "db:local": "wrangler d1 execute odobook --local --file=schema.sql",
+    "db:remote": "wrangler d1 execute odobook --remote --file=schema.sql"
+  },
+  "dependencies": {
+    "@cloudflare/workers-oauth-provider": "1.2.3",
+    "@modelcontextprotocol/sdk": "1.32.1",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "5.20261019.1",
+    "typescript": "5.9.3",
+    "wrangler": "4.151.2"
+  }
+}

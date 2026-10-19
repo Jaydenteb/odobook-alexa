@@ -1,0 +1,15 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "odobook-alexa",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": { "enabled": true },
+  "vars": {
+    // The canonical public URL (the MCP resource is PUBLIC_URL + "/mcp"). Set to the workers.dev
+    // URL after the first deploy; .dev.vars overrides it for local runs.
+    "PUBLIC_URL": "https://odobook-alexa.example.workers.dev"
+  },
+  "kv_namespaces": [{ "binding": "OAUTH_KV", "id": "00000000000000000000000000000000" }],
+  "d1_databases": [{ "binding": "DB", "database_name": "odobook", "database_id": "00000000-0000-0000-0000-000000000000" }]
+}
