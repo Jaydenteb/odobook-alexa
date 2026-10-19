@@ -1,0 +1,65 @@
+{
+  "$comment": "Alexa+ MCP add-on manifest for Odobook, written from the field list in Amazon's 'Create an MCP add-on' docs. The alexa-ai CLI that validates and deploys it is partner-only, so this hasn't been through `alexa-ai deploy`; field names follow the docs, and the exact nesting may need adjusting once the toolkit opens up.",
+  "manifestVersion": "1.0",
+  "addon": {
+    "locales": {
+      "en-US": {
+        "name": { "value": "Odobook Car Logbook" },
+        "shortDescription": "Log work trips hands-free. Odobook keeps your IRS mileage log or ATO 12-week car logbook as you drive.",
+        "fullDescription": "Odobook keeps the car logbook a tax office expects, by voice. Say \"start a work trip to the Riverside site\" when you leave and \"end trip, odometer 52,394\" when you arrive. Odobook records the date, times, odometer readings, distance, destination and a specific business purpose for every trip, asks for a clearer purpose when \"business\" isn't enough, marks late entries, and keeps a running business-use percentage. It supports the IRS mileage log (miles, tax year) and the Australian ATO 12-week logbook (km). Export to CSV for your accountant at any time. Odobook keeps records; it isn't tax advice and never estimates a deduction.",
+        "examplePhrases": [
+          "Alexa, tell Odobook to start a work trip to the Riverside site",
+          "Alexa, end my Odobook trip, the odometer says 52,394",
+          "Alexa, ask Odobook how much of my driving is for work",
+          "Alexa, tell Odobook I forgot yesterday's 40 mile drive to a client in Albany"
+        ]
+      },
+      "en-AU": {
+        "name": { "value": "Odobook Car Logbook" },
+        "shortDescription": "Log work trips hands-free. Odobook keeps your ATO 12-week car logbook as you drive.",
+        "fullDescription": "Odobook keeps your ATO 12-week logbook by voice. Say \"start a work trip to Geelong\" when you leave and \"end trip, odometer 52,394\" when you arrive. Odobook records the dates, odometer readings, km, destination and a specific purpose for every journey, as the ATO asks, flags vague purposes and late entries, warns if a first-year logbook would run past 30 June, and keeps a running business-use percentage. Export to CSV for your tax agent. Odobook keeps records; it isn't tax advice.",
+        "examplePhrases": [
+          "Alexa, tell Odobook to start a work trip to Geelong",
+          "Alexa, end my Odobook trip, the odometer says 52,394",
+          "Alexa, ask Odobook how my logbook is going",
+          "Alexa, tell Odobook I forgot yesterday's 112 km site inspection in Ballarat"
+        ]
+      }
+    },
+    "privacyPolicyUrl": "https://odobook-alexa.example.workers.dev/privacy",
+    "termsOfUseUrl": "https://odobook-alexa.example.workers.dev/terms",
+    "category": "productivity",
+    "distributionCountries": ["US", "AU"],
+    "media": {
+      "icons": {
+        "light": {
+          "72": "https://odobook-alexa.example.workers.dev/assets/icon-72.png",
+          "64": "https://odobook-alexa.example.workers.dev/assets/icon-64.png",
+          "88": "https://odobook-alexa.example.workers.dev/assets/icon-88.png",
+          "126": "https://odobook-alexa.example.workers.dev/assets/icon-126.png",
+          "180": "https://odobook-alexa.example.workers.dev/assets/icon-180.png",
+          "241": "https://odobook-alexa.example.workers.dev/assets/icon-241.png"
+        }
+      },
+      "carouselImages": [
+        {
+          "uri": "https://odobook-alexa.example.workers.dev/assets/carousel-1.png",
+          "altText": "Odobook on an Echo Show: a work trip to Geelong running since 7:59 am, 52,310 km at the start, business use 88% this period."
+        }
+      ]
+    }
+  },
+  "integrations": [
+    {
+      "type": "MCP",
+      "config": {
+        "endpoints": { "default": "https://odobook-alexa.example.workers.dev/mcp" },
+        "authorization": {
+          "type": "OAUTH2_AUTHORIZATION_CODE_PKCE",
+          "protectedResourceMetadata": "https://odobook-alexa.example.workers.dev/.well-known/oauth-protected-resource/mcp",
+          "scopes": ["logbook:read", "logbook:write"]
+        }
+      }
+    }
+  ]
+}

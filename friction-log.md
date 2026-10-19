@@ -33,4 +33,18 @@ Entries are written as things happen. Times are Melbourne (AEDT).
 - **Workaround:** WSL2 with Ubuntu 24.04.
 - **Suggestion:** Support Windows, or at least add a "Windows: use WSL2" note with the steps.
 
-<!-- To check once building: Amazon wants a 401 *without* WWW-Authenticate, but the MCP auth spec has servers use WWW-Authenticate to point clients to the PRM document. If that conflict is real, it's entry 3. -->
+## 3. "401 without WWW-Authenticate" conflicts with the MCP auth spec and standard OAuth libraries
+
+- **When:** Tue 20 Oct 2026
+- **Task:** Make the MCP server's unauthenticated response match the Alexa+ MCP requirements.
+- **Steps taken:** Built the server with a mainstream OAuth 2.1 provider library (`@cloudflare/workers-oauth-provider` 1.2.3), then compared its 401 with the Alexa+ checklist.
+- **Expected:** The same 401 would suit both Alexa+ and other MCP clients.
+- **Actual:** The Alexa+ docs say unauthenticated requests should get "`401 Unauthorized` (without a `WWW-Authenticate` header)" and list `WWW-Authenticate` under "not supported yet". But the MCP authorization spec (2025-11-25) has servers send `WWW-Authenticate` with `resource_metadata` as the main discovery path, and the library always sends it. A server written to the MCP spec doesn't match the Alexa+ wording out of the box, and it's unclear whether the header is harmful or just ignored.
+- **Severity:** Medium. It's easy to work around once spotted, but ambiguous wording here could fail certification or account linking.
+- **Workaround:** A small wrapper strips `WWW-Authenticate` from 401s on `/mcp`. The protected resource metadata is served at both `/.well-known/oauth-protected-resource/mcp` (RFC 9728) and the root form, so clients can still find it.
+- **Suggestion:** Say whether Alexa+ *rejects* a 401 that carries `WWW-Authenticate` or just *ignores* the header. If it's ignored, reword the requirement as "Alexa+ doesn't read `WWW-Authenticate`; also host PRM at the well-known URI", so spec-compliant servers don't need to change.
+
+## 4. Positive: the requirements map cleanly onto standard OAuth 2.1 tooling
+
+- Pre-registered clients (no DCR), S256-only PKCE, RFC 8707 `resource` and RFC 8414/9728 metadata were all supported by an off-the-shelf library. Apart from entry 3, the whole Alexa+ auth checklist passed in our end-to-end test on the first run.
+- Measured round trips were 8–25 ms locally against the 500 ms budget. The budget is generous for a stateless JSON-mode Streamable HTTP server.

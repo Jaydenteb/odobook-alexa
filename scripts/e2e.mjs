@@ -136,6 +136,40 @@ const after = await fetch(`${BASE}/mcp`, {
 });
 check(after.status === 401, "and the token issued from it stops working");
 
+// 6. The simulator's flow: a public client (no secret), a different loopback port each time, and
+// no `resource` on the token request.
+const pubReg = await fetch(`${BASE}/admin/clients`, {
+  method: "POST",
+  headers: { authorization: `Bearer ${ADMIN}`, "content-type": "application/json" },
+  body: JSON.stringify({ name: "Voice simulator", redirectUris: ["http://127.0.0.1/callback"], public: true }),
+});
+const pub = await pubReg.json();
+check(pubReg.status === 201 && pub.clientId && !pub.clientSecret, "admin registers a public client");
+const v2 = b64url(randomBytes(32));
+const redirect2 = `http://127.0.0.1:${40000 + Math.floor(Math.random() * 20000)}/callback`;
+const q2 = new URLSearchParams({
+  response_type: "code", client_id: pub.clientId, redirect_uri: redirect2, state: "s2",
+  code_challenge: b64url(createHash("sha256").update(v2).digest()), code_challenge_method: "S256", resource: prm.resource,
+});
+const post2 = await fetch(`${as.authorization_endpoint}?${q2}`, {
+  method: "POST", redirect: "manual", headers: { "content-type": "application/x-www-form-urlencoded" },
+  body: new URLSearchParams({ mode: "signin", email, password: "correct horse battery" }),
+});
+const code2 = new URL(post2.headers.get("location") ?? "http://x/", BASE).searchParams.get("code");
+check(post2.status === 302 && code2, "sign-in with a random loopback port is accepted");
+const tok2 = await (await fetch(as.token_endpoint, {
+  method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" },
+  body: new URLSearchParams({ grant_type: "authorization_code", code: code2, redirect_uri: redirect2, client_id: pub.clientId, code_verifier: v2 }),
+})).json();
+const list2 = await fetch(`${BASE}/mcp`, {
+  method: "POST",
+  headers: { authorization: `Bearer ${tok2.access_token}`, "content-type": "application/json", accept: "application/json, text/event-stream" },
+  body: JSON.stringify({ jsonrpc: "2.0", id: 100, method: "tools/list" }),
+});
+check(list2.status === 200, "public-client token (no resource on token request) works on /mcp");
+const badPort = await fetch(`${as.authorization_endpoint}?${new URLSearchParams({ ...Object.fromEntries(q2), redirect_uri: "http://evil.example/callback" })}`);
+check(badPort.status === 400, "a non-registered redirect URI is refused");
+
 console.log("\nRound trips (Alexa+ budget: 500 ms):");
 for (const [name, ms] of times) console.log(`  ${ms.toFixed(0).padStart(5)} ms  ${name}`);
 const worst = Math.max(...times.map(([, ms]) => ms));
