@@ -96,7 +96,7 @@ Every reply is written to be spoken: one or two short sentences, with details in
 
 ## Open Source mini challenge
 
-- **Contribution URL:** `[https://github.com/<owner>/mcp-voice-simulator/pull/<n>]` **TODO-VERIFY**
+- **Contribution URL:** https://github.com/AlSayedGamal/mcp-voice-simulator/pull/10
 - **Project repository URL:** https://github.com/Jaydenteb/odobook-alexa (**TODO-VERIFY** that it's public before submitting)
 - **GitHub username:** Jaydenteb
 - **Description of the contribution:**
