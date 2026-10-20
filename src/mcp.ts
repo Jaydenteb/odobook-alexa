@@ -167,8 +167,74 @@ export function createServer(env: Env, props: Props): McpServer {
       if (j === "AU" && end > auIncomeYearEnd(start)) {
         text += " Heads up: it runs past 30 June. A first-year logbook has to fit inside one income year.";
       }
-      if (j === "AU" && !lb.engine_cc) text += " The ATO also wants the engine size, so add that when you can.";
+      if (j === "AU" && !lb.engine_cc) text += " The ATO also wants the engine size. Just tell me when you know it.";
       return say(text, { logbookId: lb.id, startDate: start, plannedEnd: end, unit: lb.unit });
+    },
+  );
+
+  server.registerTool(
+    "update_logbook",
+    {
+      title: "Fix logbook details",
+      description:
+        "Add or correct the car's details on the running logbook: engine size, rego, make, model. " +
+        "The starting odometer can be corrected only before any trip is logged. Use this instead of closing or restarting a logbook.",
+      inputSchema: {
+        engine_cc: z.number().int().min(50).max(10_000).optional(),
+        rego: z.string().min(1).max(12).optional(),
+        make: z.string().min(1).max(40).optional(),
+        model: z.string().min(1).max(40).optional(),
+        start_odometer: z.number().int().min(0).max(2_000_000).optional(),
+      },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    },
+    async (a) => {
+      const lb = await openLogbook(env, userId);
+      if (!lb) return NO_LOGBOOK;
+      const locale = DEFAULTS[lb.jurisdiction].locale;
+      if (a.start_odometer != null) {
+        const n = await env.DB.prepare("SELECT COUNT(*) AS n FROM trips WHERE logbook_id = ?").bind(lb.id).first<number>("n");
+        if (n) return refuse("The starting odometer can't change once trips are logged, because every trip builds on it.");
+      }
+      const next = {
+        engine_cc: a.engine_cc ?? lb.engine_cc,
+        rego: a.rego?.trim().toUpperCase() ?? lb.rego,
+        make: a.make?.trim() ?? lb.make,
+        model: a.model?.trim() ?? lb.model,
+        start_odometer: a.start_odometer ?? lb.start_odometer,
+      };
+      await env.DB.prepare("UPDATE logbooks SET engine_cc = ?, rego = ?, make = ?, model = ?, start_odometer = ? WHERE id = ?")
+        .bind(next.engine_cc, next.rego, next.make, next.model, next.start_odometer, lb.id)
+        .run();
+      const changed: string[] = [];
+      if (a.engine_cc != null) changed.push(`engine size ${a.engine_cc} cc`);
+      if (a.rego) changed.push(`rego ${next.rego}`);
+      if (a.make || a.model) changed.push(`car ${next.make} ${next.model}`);
+      if (a.start_odometer != null) changed.push(`starting odometer ${fmtDistance(next.start_odometer, lb.unit, locale)}`);
+      return say(changed.length ? `Updated: ${changed.join(", ")}.` : "Nothing to change.", { car: `${next.make} ${next.model} (${next.rego})`, engineCc: next.engine_cc });
+    },
+  );
+
+  server.registerTool(
+    "discard_logbook",
+    {
+      title: "Discard an empty logbook",
+      description:
+        "Delete the running logbook so the driver can start again, only while it has no completed trips (e.g. set up with the wrong car). " +
+        "Confirm with the driver first. Once trips exist, use update_logbook or close_logbook instead.",
+      inputSchema: {},
+      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
+    },
+    async () => {
+      const lb = await openLogbook(env, userId);
+      if (!lb) return NO_LOGBOOK;
+      const n = await env.DB.prepare("SELECT COUNT(*) AS n FROM trips WHERE logbook_id = ? AND ended_at IS NOT NULL").bind(lb.id).first<number>("n");
+      if (n) return refuse(`This logbook has ${n} ${n === 1 ? "trip" : "trips"}, so I won't delete it. I can fix its details instead.`);
+      await env.DB.batch([
+        env.DB.prepare("DELETE FROM trips WHERE logbook_id = ?").bind(lb.id),
+        env.DB.prepare("DELETE FROM logbooks WHERE id = ?").bind(lb.id),
+      ]);
+      return say(`Okay, I've deleted the empty logbook for the ${lb.make} ${lb.model}. You can start a new one.`);
     },
   );
 

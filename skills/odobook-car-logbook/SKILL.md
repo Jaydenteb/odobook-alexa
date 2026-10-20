@@ -17,6 +17,8 @@ Odobook keeps the records a tax office expects for work driving. The driver is u
 | Say | Tool | Notes |
 |---|---|---|
 | "Start a logbook for my HiLux, rego 1ABC234, odometer 52,310" | `start_logbook` | Once per car and period. AU = 12 weeks, US = to 31 December. |
+| "The engine's 2.8 litres" / "I got the rego wrong" | `update_logbook` | Fixes car details. The start odometer can only change before any trip. |
+| "Scrap that logbook, wrong car" | `discard_logbook` | Only while it has no trips. Confirm first. **Never close a logbook just to fix a detail.** |
 | "Start a work trip to Geelong" | `start_trip` | Odometer defaults to the last reading. Purpose can wait until the end. |
 | "End trip, odometer 52,394" / "End trip, I drove 84 km" | `end_trip` | Needs an odometer reading **or** a distance. |
 | "I forgot to log yesterday's drive to Ballarat, 112 km, site inspection" | `log_trip` | Past trips. More than a day late gets marked late, which is expected and fine. |
