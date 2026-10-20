@@ -137,6 +137,11 @@ r = await call("logbook_status");
 check(!r.isError && r.structuredContent?.trips === 2, "logbook_status", say(r));
 r = await call("list_trips", { limit: 5 });
 check(!r.isError && r.structuredContent?.trips?.length === 2, "list_trips", say(r));
+r = await call("start_trip", {});
+r = await call("end_trip", { distance: 5 });
+check(r.isError === true && /work trip or a private/.test(say(r)), "an unlabelled trip is asked about, not guessed", say(r));
+r = await call("end_trip", { distance: 5, kind: "private" });
+check(!r.isError, "then logged once the driver says it was private", say(r));
 r = await call("update_logbook", { start_odometer: 1 });
 check(r.isError === true, "start odometer is locked once trips exist", say(r));
 r = await call("discard_logbook");
@@ -189,6 +194,29 @@ const list2 = await fetch(`${BASE}/mcp`, {
   body: JSON.stringify({ jsonrpc: "2.0", id: 100, method: "tools/list" }),
 });
 check(list2.status === 200, "public-client token (no resource on token request) works on /mcp");
+// PKCE is required, and a read-only grant can't write.
+const noPkce = new URLSearchParams(q2);
+noPkce.delete("code_challenge");
+noPkce.delete("code_challenge_method");
+check((await fetch(`${as.authorization_endpoint}?${noPkce}`)).status === 400, "an authorization request without PKCE is refused");
+const v3 = b64url(randomBytes(32));
+const q3 = new URLSearchParams({ ...Object.fromEntries(q2), scope: "logbook:read", state: "s3", code_challenge: b64url(createHash("sha256").update(v3).digest()) });
+const post3 = await fetch(`${as.authorization_endpoint}?${q3}`, {
+  method: "POST", redirect: "manual", headers: { "content-type": "application/x-www-form-urlencoded" },
+  body: new URLSearchParams({ mode: "signin", email, password: "correct horse battery" }),
+});
+const code3 = new URL(post3.headers.get("location") ?? "http://x/", BASE).searchParams.get("code");
+const tok3 = await (await fetch(as.token_endpoint, {
+  method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" },
+  body: new URLSearchParams({ grant_type: "authorization_code", code: code3, redirect_uri: redirect2, client_id: pub.clientId, code_verifier: v3 }),
+})).json();
+const ro = async (name, args = {}) => (await (await fetch(`${BASE}/mcp`, {
+  method: "POST",
+  headers: { authorization: `Bearer ${tok3.access_token}`, "content-type": "application/json", accept: "application/json, text/event-stream" },
+  body: JSON.stringify({ jsonrpc: "2.0", id: 200, method: "tools/call", params: { name, arguments: args } }),
+})).json()).result;
+check(!(await ro("logbook_status")).isError, "a read-only grant can read");
+check((await ro("start_trip")).isError === true, "a read-only grant can't write");
 const badPort = await fetch(`${as.authorization_endpoint}?${new URLSearchParams({ ...Object.fromEntries(q2), redirect_uri: "http://evil.example/callback" })}`);
 check(badPort.status === 400, "a non-registered redirect URI is refused");
 

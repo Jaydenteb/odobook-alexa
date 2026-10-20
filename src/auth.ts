@@ -141,6 +141,10 @@ async function handleAuthorize(request: Request, env: Env, url: URL): Promise<Re
   } catch (e) {
     return page("Can't link", `<div class="card"><h1>That link didn't work</h1><p>${esc(e instanceof Error ? e.message : "Invalid request")}</p></div>`, 400);
   }
+  // OAuth 2.1 (and Alexa+) require PKCE; the library accepts requests without it, so insist here.
+  if (!authReq.codeChallenge || authReq.codeChallengeMethod !== "S256") {
+    return page("Can't link", `<div class="card"><h1>That link didn't work</h1><p>This app must use PKCE (S256) to link.</p></div>`, 400);
+  }
   const client = await env.OAUTH_PROVIDER.lookupClient(authReq.clientId);
   if (!client) return page("Can't link", `<div class="card"><h1>Unknown app</h1><p>This app isn't registered with Odobook.</p></div>`, 400);
   const clientName = client.clientName ?? "An app";

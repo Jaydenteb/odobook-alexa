@@ -93,7 +93,7 @@ function tripView(t: Trip, lb: Logbook) {
 
 // ---------------------------------------------------------------- tools
 
-export function createServer(env: Env, props: Props): McpServer {
+export function createServer(env: Env, props: Props, scopes: string[] = ["logbook:read", "logbook:write"]): McpServer {
   const server = new McpServer(
     { name: "odobook", title: "Odobook car logbook", version: "0.1.0" },
     {
@@ -106,7 +106,15 @@ export function createServer(env: Env, props: Props): McpServer {
   );
   const { userId } = props;
 
-  server.registerTool(
+  // Scopes: a token without logbook:write can only use the read-only tools (readOnlyHint).
+  const canWrite = scopes.includes("logbook:write");
+  const READ_ONLY = refuse("This link only lets me read your logbook. Re-link Odobook and allow changes to log trips.");
+  // Same signature as server.registerTool (so tool arguments stay typed), with the scope check in front.
+  const register = ((name: string, config: { annotations?: { readOnlyHint?: boolean } }, cb: (...args: unknown[]) => unknown) =>
+    server.registerTool(name, config as never, (async (...args: unknown[]) =>
+      config.annotations?.readOnlyHint || canWrite ? cb(...args) : READ_ONLY) as never)) as unknown as typeof server.registerTool;
+
+  register(
     "start_logbook",
     {
       title: "Start a logbook",
@@ -172,7 +180,7 @@ export function createServer(env: Env, props: Props): McpServer {
     },
   );
 
-  server.registerTool(
+  register(
     "update_logbook",
     {
       title: "Fix logbook details",
@@ -215,7 +223,7 @@ export function createServer(env: Env, props: Props): McpServer {
     },
   );
 
-  server.registerTool(
+  register(
     "discard_logbook",
     {
       title: "Discard an empty logbook",
@@ -238,7 +246,7 @@ export function createServer(env: Env, props: Props): McpServer {
     },
   );
 
-  server.registerTool(
+  register(
     "start_trip",
     {
       title: "Start a trip",
@@ -285,7 +293,7 @@ export function createServer(env: Env, props: Props): McpServer {
     },
   );
 
-  server.registerTool(
+  register(
     "end_trip",
     {
       title: "End the current trip",
@@ -315,8 +323,10 @@ export function createServer(env: Env, props: Props): McpServer {
       }
       const distance = endOdo != null && trip.start_odometer != null ? endOdo - trip.start_odometer : a.distance!;
       if (distance > 3_000) return refuse(`That's ${fmtDistance(distance, lb.unit, locale)} in one trip. Check the reading?`);
-      const kind: Kind = (a.kind ?? trip.kind ?? "business") as Kind;
       const purpose = a.purpose?.trim() || trip.purpose;
+      // A purpose implies work; with neither a kind nor a purpose, ask rather than guess.
+      const kind = (a.kind ?? trip.kind ?? (purpose ? "business" : null)) as Kind | null;
+      if (!kind) return refuse("Was that a work trip or a private one? If it was for work, what was it for?");
       const destination = a.destination?.trim() || trip.destination;
       if (kind === "business" && isVaguePurpose(purpose)) {
         return refuse('What was the trip for? The tax office needs a specific purpose, like "site visit at the Werribee depot", not just "business".');
@@ -338,7 +348,7 @@ export function createServer(env: Env, props: Props): McpServer {
     },
   );
 
-  server.registerTool(
+  register(
     "log_trip",
     {
       title: "Log a past trip",
@@ -402,11 +412,11 @@ export function createServer(env: Env, props: Props): McpServer {
     },
   );
 
-  server.registerTool(
+  register(
     "cancel_trip",
     {
       title: "Cancel the running trip",
-      description: "Throw away the trip that's running now (started by mistake). Completed trips are kept.",
+      description: "Throw away the trip that's running now (started by mistake). Completed trips are kept. Confirm with the driver first.",
       inputSchema: {},
       annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
     },
@@ -418,7 +428,7 @@ export function createServer(env: Env, props: Props): McpServer {
     },
   );
 
-  server.registerTool(
+  register(
     "logbook_status",
     {
       title: "Logbook status",
@@ -457,7 +467,7 @@ export function createServer(env: Env, props: Props): McpServer {
     },
   );
 
-  server.registerTool(
+  register(
     "list_trips",
     {
       title: "List recent trips",
@@ -480,7 +490,7 @@ export function createServer(env: Env, props: Props): McpServer {
     },
   );
 
-  server.registerTool(
+  register(
     "close_logbook",
     {
       title: "Close the logbook",
@@ -498,8 +508,9 @@ export function createServer(env: Env, props: Props): McpServer {
       const locale = DEFAULTS[lb.jurisdiction].locale;
       if (odometer < last) return refuse(`That's lower than the last reading of ${fmtDistance(last, lb.unit, locale)}.`);
       const s = summarise({ ...lb, end_odometer: odometer }, trips, localDate(new Date(), lb.time_zone));
-      const total = odometer - lb.start_odometer;
-      const pct = total > 0 ? Math.min(100, (s.businessDistance / total) * 100) : 0;
+      // Same rule as logbook_status, so the frozen figure matches the last one the driver heard.
+      const total = s.totalDistance;
+      const pct = s.businessPct ?? 0;
       await env.DB.prepare("UPDATE logbooks SET closed_at = ?, end_odometer = ?, business_pct = ? WHERE id = ?")
         .bind(new Date().toISOString(), odometer, pct, lb.id)
         .run();
@@ -509,7 +520,7 @@ export function createServer(env: Env, props: Props): McpServer {
     },
   );
 
-  server.registerTool(
+  register(
     "export_logbook",
     {
       title: "Export the logbook",
@@ -537,7 +548,7 @@ export function createServer(env: Env, props: Props): McpServer {
 // ---------------------------------------------------------------- HTTP handler for /mcp
 
 export const mcpHandler = {
-  async fetch(request: Request, env: Env, ctx: ExecutionContext & { props: Props }): Promise<Response> {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext & { props: Props; auth?: { scope?: string[] } }): Promise<Response> {
     if (request.method !== "POST") return json(405, { error: "method not allowed" }, { Allow: "POST" });
     if (Number(request.headers.get("content-length") ?? 0) > MAX_BODY) return json(413, { error: "request too large" });
     let body: unknown;
@@ -548,7 +559,7 @@ export const mcpHandler = {
     }
     if (Array.isArray(body)) return json(400, { jsonrpc: "2.0", error: { code: -32600, message: "Batches aren't supported" }, id: null });
 
-    const server = createServer(env, ctx.props);
+    const server = createServer(env, ctx.props, ctx.auth?.scope?.length ? ctx.auth.scope : undefined);
     const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
     try {
       await server.connect(transport);
