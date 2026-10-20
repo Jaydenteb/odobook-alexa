@@ -7,6 +7,7 @@ import {
   createBedrockBrain,
   spokenBedrockError,
   toConverseTools,
+  toSpeech,
 } from "../bedrock-brain.mjs";
 
 // --- fakes ------------------------------------------------------------------
@@ -125,7 +126,7 @@ describe("createBedrockBrain turn loop", () => {
       endTurn("Logged a 42 kilometre trip for the client visit."),
     ]);
     const session = fakeSession([LOG_TRIP], () => text("Trip #7 saved: 42 km."));
-    const brain = createBedrockBrain({ session: async () => session, client: bedrock, log: silentLog });
+    const brain = createBedrockBrain({ session: async () => session, client: bedrock, speakToolResults: false, log: silentLog });
 
     const { reply, trace } = await brain.turn("log 42 k for a client visit");
 
@@ -163,7 +164,7 @@ describe("createBedrockBrain turn loop", () => {
   it("keeps conversation history across turns and clears it on reset()", async () => {
     const bedrock = fakeBedrock([endTurn("Hi there."), endTurn("Still here."), endTurn("Fresh start.")]);
     const session = fakeSession([LOG_TRIP], () => text("unused"));
-    const brain = createBedrockBrain({ session: async () => session, client: bedrock, log: silentLog });
+    const brain = createBedrockBrain({ session: async () => session, client: bedrock, speakToolResults: false, log: silentLog });
 
     await brain.turn("hello");
     await brain.turn("are you there");
@@ -182,7 +183,7 @@ describe("createBedrockBrain turn loop", () => {
       endTurn("Next."),
     ]);
     const session = fakeSession([], () => text("unused"));
-    const brain = createBedrockBrain({ session: async () => session, client: bedrock, log: silentLog });
+    const brain = createBedrockBrain({ session: async () => session, client: bedrock, speakToolResults: false, log: silentLog });
 
     const { reply } = await brain.turn("first");
     assert.equal(reply, "Done.");
@@ -195,7 +196,7 @@ describe("createBedrockBrain turn loop", () => {
     const tool = { name: "odobook.status", description: "Status", inputSchema: { type: "object", properties: {} } };
     const bedrock = fakeBedrock([toolUse("tu-1", "odobook_status", {}), endTurn("All good.")]);
     const session = fakeSession([tool], () => text("ok"));
-    const brain = createBedrockBrain({ session: async () => session, client: bedrock, log: silentLog });
+    const brain = createBedrockBrain({ session: async () => session, client: bedrock, speakToolResults: false, log: silentLog });
 
     await brain.turn("status");
     assert.equal(session.toolCalls[0].name, "odobook.status");
@@ -208,7 +209,7 @@ describe("createBedrockBrain turn loop", () => {
       endTurn("Back to normal."),
     ]);
     const session = fakeSession([LOG_TRIP], () => text("ok"));
-    const brain = createBedrockBrain({ session: async () => session, client: bedrock, maxToolRounds: 2, log: silentLog });
+    const brain = createBedrockBrain({ session: async () => session, client: bedrock, speakToolResults: false, maxToolRounds: 2, log: silentLog });
 
     const { reply, trace } = await brain.turn("loop forever");
     assert.match(reply, /too many steps/);
@@ -228,7 +229,7 @@ describe("createBedrockBrain errors", () => {
       endTurn("Sorry, the logbook says the distance must be positive."),
     ]);
     const session = fakeSession([LOG_TRIP], () => ({ ...text("km must be positive"), isError: true }));
-    const brain = createBedrockBrain({ session: async () => session, client: bedrock, log: silentLog });
+    const brain = createBedrockBrain({ session: async () => session, client: bedrock, speakToolResults: false, log: silentLog });
 
     const { reply, trace } = await brain.turn("log minus five k");
 
@@ -242,7 +243,7 @@ describe("createBedrockBrain errors", () => {
   it("never sends an empty text block in a toolResult", async () => {
     const bedrock = fakeBedrock([toolUse("tu-1", "log_trip", { km: 1 }), endTurn("Done.")]);
     const session = fakeSession([LOG_TRIP], () => ({ content: [], isError: true }));
-    const brain = createBedrockBrain({ session: async () => session, client: bedrock, log: silentLog });
+    const brain = createBedrockBrain({ session: async () => session, client: bedrock, speakToolResults: false, log: silentLog });
 
     await brain.turn("log one k");
     const result = bedrock.calls[1].messages[2].content[0].toolResult;
@@ -257,7 +258,7 @@ describe("createBedrockBrain errors", () => {
       endTurn("Working now."),
     ]);
     const session = fakeSession([LOG_TRIP], () => text("unused"));
-    const brain = createBedrockBrain({
+    const brain = createBedrockBrain({ speakToolResults: false,
       session: async () => session,
       client: bedrock,
       log: (msg) => logged.push(msg),
@@ -279,7 +280,7 @@ describe("createBedrockBrain errors", () => {
   it("rolls back a failed turn mid-loop, keeping trace of the tool calls already made", async () => {
     const bedrock = fakeBedrock([toolUse("tu-1", "log_trip", { km: 3 }), awsError("ThrottlingException")]);
     const session = fakeSession([LOG_TRIP], () => text("saved"));
-    const brain = createBedrockBrain({ session: async () => session, client: bedrock, log: silentLog });
+    const brain = createBedrockBrain({ session: async () => session, client: bedrock, speakToolResults: false, log: silentLog });
 
     const { reply, trace } = await brain.turn("log three k");
     assert.match(reply, /rate limiting/);
@@ -291,7 +292,7 @@ describe("createBedrockBrain errors", () => {
     const session = fakeSession([LOG_TRIP], () => {
       throw new Error("Session not found");
     });
-    const brain = createBedrockBrain({ session: async () => session, client: bedrock, log: silentLog });
+    const brain = createBedrockBrain({ session: async () => session, client: bedrock, speakToolResults: false, log: silentLog });
 
     await assert.rejects(brain.turn("log three k"), /Session not found/);
     await brain.turn("hello");
@@ -323,5 +324,49 @@ describe("createBedrockBrain defaults", () => {
     const brain = createBedrockBrain({ session: async () => fakeSession([], () => text("")), region: "ap-southeast-2" });
     assert.equal(brain.region, "ap-southeast-2");
     assert.equal(brain.modelId, "global.amazon.nova-2-lite-v1:0");
+  });
+});
+
+// --- speaking tool replies directly (the default) ------------------------------
+
+describe("speakToolResults (default)", () => {
+  it("speaks a single tool call's own reply and skips the rephrasing call", async () => {
+    const bedrock = fakeBedrock([toolUse("tu-1", "log_trip", { km: 42 }, "")]);
+    const session = fakeSession([LOG_TRIP], () => text("Logged 42 km for the client visit."));
+    const brain = createBedrockBrain({ session: async () => session, client: bedrock, log: silentLog });
+
+    const { reply } = await brain.turn("log 42 k");
+    assert.equal(reply, "Logged 42 km for the client visit.");
+    assert.equal(bedrock.calls.length, 1);
+  });
+
+  it("speaks a refusal as a refusal, never as success", async () => {
+    const bedrock = fakeBedrock([toolUse("tu-1", "log_trip", { km: 42 }, "")]);
+    const session = fakeSession([LOG_TRIP], () => ({ ...text("What was the trip for?"), isError: true }));
+    const brain = createBedrockBrain({ session: async () => session, client: bedrock, log: silentLog });
+
+    const { reply } = await brain.turn("log 42 k");
+    assert.equal(reply, "What was the trip for?");
+  });
+
+  it("leaves history valid: the next call starts after an assistant message", async () => {
+    const bedrock = fakeBedrock([toolUse("tu-1", "log_trip", { km: 42 }, ""), endTurn("Sure.")]);
+    const session = fakeSession([LOG_TRIP], () => text("Logged."));
+    const brain = createBedrockBrain({ session: async () => session, client: bedrock, log: silentLog });
+
+    await brain.turn("log 42 k");
+    await brain.turn("thanks");
+    const roles = bedrock.calls[1].messages.map((m) => m.role);
+    assert.deepEqual(roles, ["user", "assistant", "user", "assistant", "user"]);
+  });
+});
+
+describe("toSpeech", () => {
+  it("strips markdown, bullets and line breaks", () => {
+    assert.equal(
+      toSpeech("I need either:\n- The current odometer reading, or\n- The distance you drove\n\n**Which one?**"),
+      "I need either: The current odometer reading, or The distance you drove. Which one?",
+    );
+    assert.equal(toSpeech("Done.\nAnything else?"), "Done. Anything else?");
   });
 });

@@ -13,11 +13,26 @@ import { callTool } from "mcp-voice-simulator";
 // Same intent as the simulator's Claude brain prompt: short spoken replies, use the
 // tools, preview before confirming anything destructive, report errors plainly.
 export const DEFAULT_SYSTEM_PROMPT = [
-  "You are a voice assistant speaking through a smart display. Replies are read aloud: one to three short sentences, no markdown, no lists.",
+  "You are a voice assistant speaking through a smart display. Replies are read aloud: one or two short sentences, plain words, no markdown, no lists, no line breaks.",
   "Use the provided tools for anything the user's request maps to. Prefer the tool whose name or description best matches what they said.",
+  "When a request is missing something a tool needs (a reading, a purpose), ask one short question. Never ask for two things at once.",
   "For any tool with a confirm or dryRun parameter: never pass confirm: true or dryRun: false until the user has explicitly agreed in their latest message. Preview first, then ask.",
-  "Report tool results faithfully; if a tool returns an error, say so plainly.",
+  "Report tool results faithfully. If a tool returns an error, nothing was done: never say it succeeded. Don't add advice or commentary the tool didn't give.",
 ].join(" ");
+
+/**
+ * A model reply as speech: no markdown emphasis, bullets, headings or line breaks.
+ * (Voice brains read this aloud, and small models like to format.)
+ */
+export function toSpeech(text) {
+  return text
+    .replace(/\*\*|__|`/g, "")
+    .replace(/^\s*(?:[-*•]|\d+[.)])\s+/gm, "")
+    .replace(/^#+\s*/gm, "")
+    .replace(/\s*\n+\s*/g, (m, i, s) => (/(?:[.!?:,;]|\b(?:or|and))$/i.test(s.slice(0, i).trimEnd()) ? " " : ". "))
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
 
 // Amazon Nova 2 Lite through the global cross-Region inference profile (the only route to Nova 2
 // Lite from Sydney). Tested live 20 Oct 2026: Converse tool use works. Override with BEDROCK_MODEL_ID.
@@ -92,11 +107,12 @@ export function spokenBedrockError(err) {
 }
 
 function replyFromContent(content) {
-  return (content ?? [])
-    .filter((block) => typeof block.text === "string")
-    .map((block) => block.text)
-    .join(" ")
-    .trim();
+  return toSpeech(
+    (content ?? [])
+      .filter((block) => typeof block.text === "string")
+      .map((block) => block.text)
+      .join(" "),
+  );
 }
 
 /**
@@ -107,6 +123,10 @@ function replyFromContent(content) {
  * @param {string} [options.systemPrompt]
  * @param {number} [options.maxTokens]
  * @param {number} [options.maxToolRounds]
+ * @param {boolean} [options.speakToolResults]  When a round is one tool call that returns text, speak
+ *   that text as the reply instead of asking the model to rephrase it (default true). MCP servers built
+ *   for voice, like Odobook, write their tool replies to be read aloud; speaking them directly is
+ *   faithful (a refused call can't be reported as done) and saves a model round trip.
  * @param {{ send(command: unknown): Promise<any> }} [options.client]  Inject a client (tests).
  * @param {(msg: string, err: unknown) => void} [options.log]
  */
@@ -115,6 +135,7 @@ export function createBedrockBrain(options) {
   const region = options.region ?? DEFAULT_REGION;
   const maxToolRounds = options.maxToolRounds ?? 6;
   const maxTokens = options.maxTokens ?? 2048;
+  const speakToolResults = options.speakToolResults ?? true;
   const systemPrompt = options.systemPrompt ?? DEFAULT_SYSTEM_PROMPT;
   const log = options.log ?? ((msg, err) => console.error(`bedrock-brain: ${msg}`, err));
   // Credentials come from the standard AWS chain (AWS_PROFILE, env vars, SSO, ...).
@@ -175,11 +196,13 @@ export function createBedrockBrain(options) {
           }
 
           const results = [];
+          let lastText = "";
           for (const use of toolUses) {
             const mcpName = nameMap.get(use.name) ?? use.name;
             const input = use.input && typeof use.input === "object" ? use.input : {};
             const callResult = await callTool(session, mcpName, input);
             trace.push(callResult);
+            lastText = callResult.text ?? "";
             results.push({
               toolResult: {
                 toolUseId: use.toolUseId,
@@ -190,6 +213,13 @@ export function createBedrockBrain(options) {
             });
           }
           history.push({ role: "user", content: results });
+          if (speakToolResults && toolUses.length === 1 && lastText.trim()) {
+            // Speak the tool's own reply. Record it as the assistant's turn so the history stays
+            // valid for Converse (a toolResult must be followed by an assistant message).
+            const reply = toSpeech(lastText);
+            history.push({ role: "assistant", content: [{ text: reply }] });
+            return { reply, trace };
+          }
         }
       } catch (err) {
         // An MCP transport failure: drop this turn so the history stays valid

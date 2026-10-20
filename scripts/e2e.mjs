@@ -117,7 +117,7 @@ check(r.isError === true, "status without a logbook asks to start one");
 r = await call("start_logbook", { make: "Toyota", model: "HiLux", rego: "1abc234", odometer: 52310, engine_cc: 2800 });
 check(!r.isError, "start_logbook", say(r));
 r = await call("update_logbook", { engine_cc: 2755, start_odometer: 52300 });
-check(!r.isError && /2755 cc/.test(say(r)), "update_logbook fixes engine size and start odometer before trips", say(r));
+check(!r.isError && /2,755 cc/.test(say(r)), "update_logbook fixes engine size and start odometer before trips", say(r));
 r = await call("discard_logbook");
 check(!r.isError, "discard_logbook deletes an empty logbook", say(r));
 r = await call("start_logbook", { make: "Toyota", model: "HiLux", rego: "1abc234", odometer: 52310, engine_cc: 2800 });

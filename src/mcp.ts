@@ -18,6 +18,7 @@ import {
   type Trip,
   fmtDate,
   fmtDistance,
+  fmtNumber,
   fmtPct,
   isLate,
   isVaguePurpose,
@@ -215,11 +216,12 @@ export function createServer(env: Env, props: Props, scopes: string[] = ["logboo
         .bind(next.engine_cc, next.rego, next.make, next.model, next.start_odometer, lb.id)
         .run();
       const changed: string[] = [];
-      if (a.engine_cc != null) changed.push(`engine size ${a.engine_cc} cc`);
-      if (a.rego) changed.push(`rego ${next.rego}`);
-      if (a.make || a.model) changed.push(`car ${next.make} ${next.model}`);
-      if (a.start_odometer != null) changed.push(`starting odometer ${fmtDistance(next.start_odometer, lb.unit, locale)}`);
-      return say(changed.length ? `Updated: ${changed.join(", ")}.` : "Nothing to change.", { car: `${next.make} ${next.model} (${next.rego})`, engineCc: next.engine_cc });
+      if (a.engine_cc != null) changed.push(`the engine size to ${fmtNumber(a.engine_cc, locale)} cc`);
+      if (a.rego) changed.push(`the rego to ${next.rego}`);
+      if (a.make || a.model) changed.push(`the car to ${next.make} ${next.model}`);
+      if (a.start_odometer != null) changed.push(`the starting odometer to ${fmtDistance(next.start_odometer, lb.unit, locale)}`);
+      const list = changed.length > 1 ? `${changed.slice(0, -1).join(", ")} and ${changed.at(-1)}` : changed[0];
+      return say(changed.length ? `Done, I've updated ${list}.` : "There was nothing to change.", { car: `${next.make} ${next.model} (${next.rego})`, engineCc: next.engine_cc });
     },
   );
 
