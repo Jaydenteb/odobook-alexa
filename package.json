@@ -11,7 +11,9 @@
     "typecheck": "tsc --noEmit",
     "test": "node --test --experimental-strip-types test/*.test.ts",
     "db:local": "wrangler d1 execute odobook --local --file=schema.sql",
-    "db:remote": "wrangler d1 execute odobook --remote --file=schema.sql"
+    "db:remote": "wrangler d1 execute odobook --remote --file=schema.sql",
+    "test:e2e": "node scripts/e2e.mjs",
+    "test:browser": "node scripts/browser-e2e.mjs"
   },
   "dependencies": {
     "@cloudflare/workers-oauth-provider": "1.2.3",
@@ -20,6 +22,7 @@
   },
   "devDependencies": {
     "@cloudflare/workers-types": "5.20261019.1",
+    "playwright": "1.56.1",
     "typescript": "5.9.3",
     "wrangler": "4.151.2"
   }

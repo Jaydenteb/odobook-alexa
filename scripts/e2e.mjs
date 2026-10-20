@@ -53,11 +53,18 @@ check(authHtml.includes("Sign in and allow"), "authorize page renders");
 const switchHref = authHtml.match(/class="switch" href="([^"]+)"/)?.[1]?.replace(/&amp;/g, "&");
 const switched = switchHref ? await (await fetch(new URL(switchHref, BASE))).text() : "";
 check(switched.includes("Create account and allow"), "the sign-up switch keeps the authorization request");
+// Browsers send Origin on form posts: our own origin must pass, another site's must not.
+const forged = await fetch(authUrl, {
+  method: "POST", redirect: "manual",
+  headers: { "content-type": "application/x-www-form-urlencoded", origin: "https://evil.example" },
+  body: new URLSearchParams({ mode: "signin", email: "x@example.com", password: "x" }),
+});
+check(forged.status === 403, "a sign-in form posted from another site is refused");
 const email = `e2e-${Date.now()}@example.com`;
 const post = await fetch(authUrl, {
   method: "POST",
   redirect: "manual",
-  headers: { "content-type": "application/x-www-form-urlencoded" },
+  headers: { "content-type": "application/x-www-form-urlencoded", origin: new URL(BASE).origin },
   body: new URLSearchParams({ mode: "signup", name: "Test Driver", email, password: "correct horse battery" }),
 });
 const loc = post.headers.get("location") ?? "";

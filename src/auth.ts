@@ -23,8 +23,12 @@ const HTML_HEADERS = {
   "Content-Type": "text/html; charset=utf-8",
   "Cache-Control": "no-store",
   "X-Content-Type-Options": "nosniff",
-  "Referrer-Policy": "no-referrer",
-  "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'",
+  // Not no-referrer: with that, browsers send "Origin: null" on the page's own form posts, which
+  // the same-origin check below would refuse.
+  "Referrer-Policy": "same-origin",
+  // No form-action: browsers apply it to the redirect after a form post too, which would block the
+  // hand-back to the linking app (a loopback port, or Amazon's account-linking URL).
+  "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'",
 };
 
 const esc = (s: string) =>
@@ -119,7 +123,6 @@ ${mode === "signup" ? `<label for="name">Your name</label><input id="name" name=
 <a class="switch" href="${esc(`${action}&_mode=${other}`)}">${mode === "signin" ? "New here? Create an account" : "Have an account? Sign in"}</a>
 <p class="small">Odobook keeps records. It isn't tax advice. <a href="/privacy">Privacy</a> · <a href="/terms">Terms</a></p>
 </div>`,
-    error ? 400 : 200,
   );
 }
 
