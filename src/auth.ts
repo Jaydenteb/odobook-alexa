@@ -43,7 +43,7 @@ h1{font-size:22px;margin:0 0 4px}p{color:var(--muted);margin:4px 0 16px}
 label{display:block;font-size:14px;margin:12px 0 4px}
 input{width:100%;box-sizing:border-box;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:transparent;color:inherit;font:inherit}
 button{margin-top:18px;width:100%;padding:11px;border:0;border-radius:10px;background:var(--accent);color:#fff;font:600 16px system-ui;cursor:pointer}
-button.secondary{background:transparent;color:var(--muted);border:1px solid var(--line)}
+a.switch{display:block;margin-top:12px;padding:10px;border:1px solid var(--line);border-radius:10px;text-align:center;color:var(--muted);text-decoration:none}
 ul{padding-left:20px;color:var(--muted)}.err{color:var(--warn)}.small{font-size:13px}
 a{color:var(--accent)}
 </style></head><body><main>${body}</main></body></html>`,
@@ -116,8 +116,7 @@ ${mode === "signup" ? `<label for="name">Your name</label><input id="name" name=
 <label for="password">Password</label><input id="password" name="password" type="password" autocomplete="${mode === "signup" ? "new-password" : "current-password"}" required minlength="${mode === "signup" ? 10 : 1}" maxlength="200">
 <button type="submit">${mode === "signin" ? "Sign in and allow" : "Create account and allow"}</button>
 </form>
-<form method="get" action="${esc(action)}"><input type="hidden" name="_mode" value="${other}">
-<button class="secondary" type="submit">${mode === "signin" ? "New here? Create an account" : "Have an account? Sign in"}</button></form>
+<a class="switch" href="${esc(`${action}&_mode=${other}`)}">${mode === "signin" ? "New here? Create an account" : "Have an account? Sign in"}</a>
 <p class="small">Odobook keeps records. It isn't tax advice. <a href="/privacy">Privacy</a> · <a href="/terms">Terms</a></p>
 </div>`,
     error ? 400 : 200,

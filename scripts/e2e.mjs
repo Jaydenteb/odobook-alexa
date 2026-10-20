@@ -47,7 +47,12 @@ const q = new URLSearchParams({
   resource: prm.resource,
 });
 const authUrl = `${as.authorization_endpoint}?${q}`;
-check((await fetch(authUrl)).status === 200, "authorize page renders");
+const authHtml = await (await fetch(authUrl)).text();
+check(authHtml.includes("Sign in and allow"), "authorize page renders");
+// Following the "Create an account" switch must keep the original authorization query.
+const switchHref = authHtml.match(/class="switch" href="([^"]+)"/)?.[1]?.replace(/&amp;/g, "&");
+const switched = switchHref ? await (await fetch(new URL(switchHref, BASE))).text() : "";
+check(switched.includes("Create account and allow"), "the sign-up switch keeps the authorization request");
 const email = `e2e-${Date.now()}@example.com`;
 const post = await fetch(authUrl, {
   method: "POST",
