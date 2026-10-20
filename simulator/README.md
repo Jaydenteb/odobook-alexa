@@ -67,22 +67,17 @@ The simulator's `Brain` interface is `{ name, turn(utterance): Promise<{ reply, 
 All steps use the **Asia Pacific (Sydney) `ap-southeast-2`** Region. Replace `ACCOUNT_ID` with your 12-digit AWS
 account ID. The console shows it in the top-right menu; with admin credentials, `aws sts get-caller-identity` prints it.
 
-### 1. Turn on the Claude model (as your admin/root user)
+### 1. Check the model works (as your admin/root user)
 
-The old "Model access" page is gone in commercial Regions, and models are now enabled on first use. Anthropic
-models have two extra prerequisites:
+The default model is **Amazon Nova 2 Lite**, reached from Sydney through the **global** cross-Region inference
+profile `global.amazon.nova-2-lite-v1:0` (Nova 2 Lite has no in-Region or AU route from Sydney, so requests may be
+served in other Regions). Amazon models need no use-case form: open the Bedrock console in Sydney, pick **Nova 2 Lite**
+in the playground and send one message.
 
-1. Open the Bedrock console in Sydney: <https://ap-southeast-2.console.aws.amazon.com/bedrock/home?region=ap-southeast-2>.
-2. **Submit the Anthropic first-time-use form.** Go to **Model catalog → Claude Haiku 5.5** (or the
-   [Anthropic provider page](https://console.aws.amazon.com/bedrock/home#/providers/anthropic)) and fill in the use-case
-   details. If you have no company website, a GitHub/project URL is fine. You only do this once per account.
-3. **Make the first call from the console.** Open Claude Haiku 5.5 in the **playground** and send one message.
-   That first call subscribes the account to the model through AWS Marketplace, and it needs
-   `aws-marketplace:Subscribe`/`ViewSubscriptions`/`Unsubscribe`. Your admin user has those, so the app's IAM user
-   below never needs them. The account needs a valid payment method.
-   - If the console says the agreement is pending, wait for AWS's email. You can check with
-     `aws bedrock get-foundation-model-availability --model-id anthropic.claude-haiku-5-5 --region ap-southeast-2`
-     using admin credentials, and wait until `agreementAvailability.status` is `AVAILABLE`.
+> We first tried Claude Haiku 5.5 (`au.anthropic.claude-haiku-5-5`). After submitting Anthropic's use-case form, the
+> playground still answered `AccessDeniedException: ... is not available for this account`, a restriction that is common
+> on new accounts. Nova worked straight away. To use a Claude model instead once your account allows it, set
+> `BEDROCK_MODEL_ID` and change the model names in the policy below.
 
 ### 2. Create the IAM user `odobook-bedrock`
 
@@ -95,22 +90,22 @@ below with `ACCOUNT_ID` replaced, and name it `odobook-bedrock-converse`.
   "Version": "2012-10-17",
   "Statement": [
     {
-      "Sid": "InvokeClaudeHaikuAuProfile",
+      "Sid": "InvokeNovaGlobalProfile",
       "Effect": "Allow",
       "Action": "bedrock:InvokeModel",
-      "Resource": "arn:aws:bedrock:ap-southeast-2:ACCOUNT_ID:inference-profile/au.anthropic.claude-haiku-5-5"
+      "Resource": "arn:aws:bedrock:ap-southeast-2:ACCOUNT_ID:inference-profile/global.amazon.nova-2-lite-v1:0"
     },
     {
-      "Sid": "InvokeClaudeHaikuOnlyThroughAuProfile",
+      "Sid": "InvokeNovaOnlyThroughThatProfile",
       "Effect": "Allow",
       "Action": "bedrock:InvokeModel",
       "Resource": [
-        "arn:aws:bedrock:ap-southeast-2::foundation-model/anthropic.claude-haiku-5-5",
-        "arn:aws:bedrock:ap-southeast-4::foundation-model/anthropic.claude-haiku-5-5"
+        "arn:aws:bedrock:*::foundation-model/amazon.nova-2-lite-v1:0",
+        "arn:aws:bedrock:::foundation-model/amazon.nova-2-lite-v1:0"
       ],
       "Condition": {
         "StringLike": {
-          "bedrock:InferenceProfileArn": "arn:aws:bedrock:ap-southeast-2:ACCOUNT_ID:inference-profile/au.anthropic.claude-haiku-5-5"
+          "bedrock:InferenceProfileArn": "arn:aws:bedrock:ap-southeast-2:ACCOUNT_ID:inference-profile/global.amazon.nova-2-lite-v1:0"
         }
       }
     }
@@ -121,18 +116,12 @@ below with `ACCOUNT_ID` replaced, and name it `odobook-bedrock-converse`.
 Why it looks like this:
 
 - **`Converse` is authorised as `bedrock:InvokeModel`.** `ConverseStream` would need
-  `bedrock:InvokeModelWithResponseStream`, but this brain doesn't stream, so that action is left out.
-- **The inference profile and the foundation models both need permission.** With a cross-Region inference profile,
-  IAM checks the profile ARN in the source Region (Sydney) *and* the foundation-model ARN in every Region the profile
-  can route to. The `au.` profile called from Sydney routes to `ap-southeast-2` and `ap-southeast-4` (Melbourne).
-  If the Melbourne ARN is missing, some calls fail with `AccessDeniedException` and others succeed.
-- **The `bedrock:InferenceProfileArn` condition** means the user can reach the model only through that one AU profile,
-  not directly or through a global profile.
-- There is no `bedrock:ListInferenceProfiles` and no Marketplace permission. Do discovery and the first subscription
-  with your admin credentials.
-
-To use **Claude Sonnet 5.5** instead, change every `claude-haiku-5-5` in the policy to `claude-sonnet-5-5`, or add a
-second pair of statements so the user can call both.
+  `bedrock:InvokeModelWithResponseStream`, but this brain doesn't stream.
+- **The inference profile and the foundation model both need permission.** A global profile can route to any
+  commercial Region, so the foundation-model ARNs use a Region wildcard plus the Region-less global form.
+- **The `bedrock:InferenceProfileArn` condition** means the user can reach the model only through that one profile.
+- Verified live on 20 Oct 2026: with exactly this policy, a Converse call with a tool returned `stopReason: tool_use`
+  in about 1.2 s.
 
 ### 3. Create an access key and a CLI profile
 
@@ -153,27 +142,26 @@ Check that the user can call the model. Each check costs a few tokens.
 
 ```sh
 aws bedrock-runtime converse --profile odobook-bedrock --region ap-southeast-2 \
-  --model-id au.anthropic.claude-haiku-5-5 \
+  --model-id global.amazon.nova-2-lite-v1:0 \
   --messages '[{"role":"user","content":[{"text":"Say hello in five words."}]}]'
 ```
 
 ### 4. Find or confirm the model / inference-profile ID
 
-The default is **`au.anthropic.claude-haiku-5-5`**, taken from the AWS model card for Claude Haiku 5.5. Its "Geo: AU"
-profile routes from Sydney to Sydney and Melbourne. Claude Sonnet 5.5 has the matching profile
-`au.anthropic.claude-sonnet-5-5`. Haiku is the default because a voice turn wants low latency and low cost; switch to
-Sonnet if tool choice needs more judgement.
+The default is **`global.amazon.nova-2-lite-v1:0`**, from the AWS model card for Nova 2 Lite: from Sydney it's offered
+only through the global profile. It's fast and cheap, which suits a voice turn. Any Converse-capable model your account
+can use works through `BEDROCK_MODEL_ID` (with a matching policy).
 
 To list what your account can use from Sydney, use admin credentials, since the app user can't list:
 
 ```sh
 aws bedrock list-inference-profiles --region ap-southeast-2 --type-equals SYSTEM_DEFINED \
-  --query "inferenceProfileSummaries[?status=='ACTIVE' && contains(inferenceProfileId, 'anthropic')].[inferenceProfileId,inferenceProfileName]" \
+  --query "inferenceProfileSummaries[?status=='ACTIVE' && contains(inferenceProfileId, 'nova')].[inferenceProfileId,inferenceProfileName]" \
   --output table
 
 # Which Regions a profile can route to (every one needs a foundation-model ARN in the policy):
 aws bedrock get-inference-profile --region ap-southeast-2 \
-  --inference-profile-identifier au.anthropic.claude-haiku-5-5 --query 'models[].modelArn'
+  --inference-profile-identifier global.amazon.nova-2-lite-v1:0 --query 'models[].modelArn'
 ```
 
 ## Install and run
@@ -185,19 +173,19 @@ npm install --ignore-scripts
 npm test            # unit tests, mocked Bedrock, no AWS calls
 ```
 
-Run it with the Bedrock brain. `MCP_URL` and `MCP_CLIENT_ID` come from the repo's `.env` as before, and the AWS
-credentials come from the profile:
-
-```powershell
-# PowerShell, from D:\NON EDU\alexa-logbook\simulator
-$env:AWS_PROFILE = "odobook-bedrock"; $env:SIM_BRAIN = "bedrock"
-node --env-file="../.env" run.mjs
-```
+Run it with the Bedrock brain. `MCP_CLIENT_ID` is the public client registered with `POST /admin/clients`
+(redirect `http://127.0.0.1/callback`, any port), and the AWS credentials come from the profile:
 
 ```sh
-# bash / WSL, from the simulator folder
-AWS_PROFILE=odobook-bedrock SIM_BRAIN=bedrock node --env-file=../.env run.mjs
+# bash, from the simulator folder
+SIM_BRAIN=bedrock AWS_PROFILE=odobook-bedrock AWS_REGION=ap-southeast-2 \
+MCP_URL=https://odobook-alexa.odobook-alexa.workers.dev/mcp MCP_CLIENT_ID=<client id> \
+node run.mjs
 ```
+
+On Windows with the AWS CLI configured inside WSL, point the SDK at the WSL files instead of installing the CLI twice:
+`AWS_SHARED_CREDENTIALS_FILE=//wsl.localhost/Ubuntu-24.04/home/<user>/.aws/credentials` and
+`AWS_CONFIG_FILE=//wsl.localhost/Ubuntu-24.04/home/<user>/.aws/config`.
 
 Then open <http://127.0.0.1:8790>, link the Odobook account when prompted and talk to it. The startup banner prints
 the brain, model and Region it's using.
@@ -214,7 +202,7 @@ To run the original Anthropic API brain, use `SIM_BRAIN=claude` with `ANTHROPIC_
 | `MCP_URL` | (required) | The Odobook MCP endpoint, e.g. `https://odobook-alexa.odobook-alexa.workers.dev/mcp`. |
 | `MCP_CLIENT_ID` | dynamic registration | Pre-registered OAuth client ID. |
 | `SIM_BRAIN` | `bedrock` | `bedrock` or `claude`. |
-| `BEDROCK_MODEL_ID` | `au.anthropic.claude-haiku-5-5` | Any Converse-capable model ID, inference-profile ID or ARN. |
+| `BEDROCK_MODEL_ID` | `global.amazon.nova-2-lite-v1:0` | Any Converse-capable model ID, inference-profile ID or ARN. |
 | `AWS_REGION` | `ap-southeast-2` | Region for the `bedrock-runtime` client. It has to be a source Region of the profile. |
 | `AWS_PROFILE` | AWS default chain | Named profile, e.g. `odobook-bedrock`. Env keys, SSO and the rest of the standard chain also work. |
 | `SIM_PORT` | `8790` | Simulator port. MCP Apps views use the next port up. |
@@ -225,17 +213,15 @@ To run the original Anthropic API brain, use `SIM_BRAIN=claude` with `ANTHROPIC_
 ## Costs
 
 Bedrock bills **per token**: input tokens and output tokens are priced separately. There is no per-request or idle
-charge. Anthropic models are billed through AWS Marketplace and show on your AWS bill under the model provider. See
-<https://aws.amazon.com/bedrock/pricing/> for current rates for Claude Haiku 5.5 / Sonnet 5.5, including the
-cross-Region (geo) rate.
+charge. See <https://aws.amazon.com/bedrock/pricing/> for current Nova 2 Lite rates.
 
 What drives the token count here:
 
 - **Every Converse call resends the system prompt, all tool definitions and the whole conversation.** One spoken
   turn that uses a tool is two calls, so long conversations get steadily more expensive. **Reset** in the simulator
   UI clears the history.
-- Claude Haiku 5.5 and Sonnet 5.5 think adaptively by default, and thinking tokens are billed as output.
-- A demo session of a few dozen turns on Haiku should cost cents, but set an **AWS Budgets** alert, for example at
+- Nova 2 Lite reasons before answering by default, and reasoning tokens are billed as output.
+- A demo session of a few dozen turns should cost cents, but set an **AWS Budgets** alert, for example at
   US$5/month, before leaving anything running.
 
 ## Troubleshooting

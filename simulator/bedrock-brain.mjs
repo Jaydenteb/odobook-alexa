@@ -19,9 +19,9 @@ export const DEFAULT_SYSTEM_PROMPT = [
   "Report tool results faithfully; if a tool returns an error, say so plainly.",
 ].join(" ");
 
-// Claude Haiku 5.5 through the AU geographic cross-Region inference profile:
-// called from ap-southeast-2 (Sydney), it routes only to Sydney and Melbourne.
-export const DEFAULT_MODEL_ID = "au.anthropic.claude-haiku-5-5";
+// Amazon Nova 2 Lite through the global cross-Region inference profile (the only route to Nova 2
+// Lite from Sydney). Tested live 20 Oct 2026: Converse tool use works. Override with BEDROCK_MODEL_ID.
+export const DEFAULT_MODEL_ID = "global.amazon.nova-2-lite-v1:0";
 export const DEFAULT_REGION = "ap-southeast-2";
 
 const TOO_MANY_STEPS = "Sorry, that took too many steps. Could you say that again?";

@@ -322,6 +322,6 @@ describe("createBedrockBrain defaults", () => {
   it("builds a real BedrockRuntimeClient for the requested region without calling AWS", async () => {
     const brain = createBedrockBrain({ session: async () => fakeSession([], () => text("")), region: "ap-southeast-2" });
     assert.equal(brain.region, "ap-southeast-2");
-    assert.equal(brain.modelId, "au.anthropic.claude-haiku-5-5");
+    assert.equal(brain.modelId, "global.amazon.nova-2-lite-v1:0");
   });
 });

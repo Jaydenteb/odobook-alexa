@@ -50,7 +50,7 @@ Every reply is written to be spoken: one or two short sentences, with details in
 - **Auth:** `@cloudflare/workers-oauth-provider` for authorization code + PKCE (S256 only), RFC 8707 resource indicators, RFC 9728 protected resource metadata and RFC 8414 authorization server metadata. Clients are pre-registered through an admin route, because Alexa+ doesn't support Dynamic Client Registration. Unauthenticated MCP requests get a bare 401 with no `WWW-Authenticate` header, as the Alexa+ docs require. The sign-in page is my own: PBKDF2 password hashing, same-origin form checks, a tight CSP.
 - **Alexa+:** the real add-on toolkit (the `alexa-ai` CLI and MCP Toolkit) is available to select partners only. Amazon's Chief Alexa Evangelist said on the hackathon Discord that entrants should build the underlying MCP functionality, mimic the true add-on lifecycle, and demo it another way. So I built to every published Alexa+ MCP requirement, wrote an `addon.json` following the documented manifest fields, and demoed with the community **mcp-voice-simulator**, which does OAuth account linking and voice in the browser.
 - **Agent Skill:** `skills/odobook-car-logbook/SKILL.md` teaches any agent the tools and the rules (ask for a real purpose, one question at a time while driving, never a dollar figure).
-- **Amazon Bedrock:** a Converse API tool-use loop (the "brain") that reads the Odobook tool list over MCP and drives the tools from natural speech. **TODO-VERIFY:** model, region and how it's wired into the simulator.
+- **Amazon Bedrock:** a Converse API tool-use loop (the "brain") that reads the Odobook tool list over MCP and drives the tools from natural speech. It runs Amazon Nova 2 Lite (`global.amazon.nova-2-lite-v1:0`) from Sydney and plugs into the simulator as a custom brain (`simulator/run.mjs`, `SIM_BRAIN=bedrock`).
 - **Testing:** 10 unit tests on the logbook rules (`node --test`); an end-to-end script against the live server covering discovery, the PKCE flow, every tool, code replay (a replayed authorization code is refused and revokes the token it issued) and per-call latency; and a headless-Chromium test of account linking, which caught three browser-only bugs the API tests couldn't (below).
 - Built over about two days with **Claude Code** as a pair programmer.
 
@@ -97,14 +97,14 @@ Every reply is written to be spoken: one or two short sentences, with details in
 ## Open Source mini challenge
 
 - **Contribution URL:** https://github.com/AlSayedGamal/mcp-voice-simulator/pull/10
-- **Project repository URL:** https://github.com/Jaydenteb/odobook-alexa (**TODO-VERIFY** that it's public before submitting)
+- **Project repository URL:** https://github.com/Jaydenteb/odobook-alexa
 - **GitHub username:** Jaydenteb
 - **Description of the contribution:**
   > A pull request to mcp-voice-simulator, the community browser simulator that Alexa+ track entrants use to demo MCP servers by voice. Before it, speech input stopped at the first pause, so a natural sentence like "End trip... odometer 52,931" was cut in half and sent early. The PR makes voice input continuous, so pauses don't end the turn; sends automatically after 2 seconds of silence, so it stays hands-free; and sets the speech-recognition language from the browser's language instead of a fixed en-US, so Australian and other English speakers (and other languages) are recognised properly. I found the problem while recording Odobook's demo, where pausing to read an odometer is normal. **TODO-VERIFY** the PR's final scope and whether it's merged.
 
 ## AWS Builder mini challenge
 
-- **AWS services used:** Amazon Bedrock (Converse API with tool use). **TODO-VERIFY** model ID (for example an Amazon Nova model), region, and whether IAM was used for the Bedrock credentials.
+- **AWS services used:** Amazon Bedrock (Converse API with tool use). Model: Amazon Nova 2 Lite via the global inference profile `global.amazon.nova-2-lite-v1:0`, called from ap-southeast-2. AWS IAM: a least-privilege user that can invoke only that model through that profile.
 - **How they're used:**
   > A small "brain" in `simulator/` uses the Bedrock Converse API as the reasoning layer between speech and the Odobook MCP server, standing in for Alexa+'s own model. It lists Odobook's 11 tools over MCP, passes them to Converse as `toolConfig`, and loops: send the user's utterance, run any `toolUse` the model returns against Odobook's `/mcp` with the linked account's OAuth token, return the `toolResult`, and speak the model's final reply. Odobook's server-side rules (refusing "business" as a purpose, late-entry flags, no dollar estimates) apply whichever model is driving. **TODO-VERIFY** all of this against the finished code; it was being built at the time of writing.
 
@@ -119,8 +119,8 @@ Every reply is written to be spoken: one or two short sentences, with details in
 
 **Try it by voice with the simulator:**
 1. Demo account: email `[demo email]`, password `[demo password]`. It has a 12-week AU logbook for a Toyota HiLux with three weeks of trips. (Or create your own account on the sign-in page; it takes 20 seconds.)
-2. Open mcp-voice-simulator `[simulator URL or repo]` **TODO-VERIFY**, and add the MCP server URL `https://odobook-alexa.odobook-alexa.workers.dev/mcp`.
-3. Odobook only accepts pre-registered clients (as Alexa+ requires), so use client ID `[public client ID]` **TODO-VERIFY** (a public client registered for loopback redirects on any port).
+2. Open mcp-voice-simulator (the copy in this repo's `simulator/` folder, or `npm i -g mcp-voice-simulator`), and add the MCP server URL `https://odobook-alexa.odobook-alexa.workers.dev/mcp`.
+3. Odobook only accepts pre-registered clients (as Alexa+ requires), so use client ID `MlV6mKfokdySIpfd` (a public client registered for loopback redirects on any port).
 4. Click to link the account. The "Link Odobook" page opens; sign in with the demo account and you're sent back to the simulator.
 5. Allow the microphone and try:
    - "How's my logbook going?"

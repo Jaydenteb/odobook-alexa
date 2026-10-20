@@ -55,21 +55,23 @@ Summary: the published Alexa+ MCP requirements are clear and standards-based, an
 
 ## 4. Amazon Bedrock (Converse API), for the AWS Builder mini challenge
 
-**What I used it for:** a "brain" in `simulator/` that drives Odobook's MCP tools through the Converse API's tool use, standing in for the Alexa+ model. **TODO-VERIFY:** model ID, region, and whether streaming (`ConverseStream`) was used.
+**What I used it for:** a "brain" in `simulator/` that drives Odobook's MCP tools through the Converse API's tool use, standing in for the Alexa+ model. Model: **Amazon Nova 2 Lite** through the global inference profile `global.amazon.nova-2-lite-v1:0`, called from Sydney (`ap-southeast-2`), non-streaming `Converse`, with a least-privilege IAM user.
 
-**What worked (so far):**
-- Converse's `toolConfig` / `toolUse` / `toolResult` shape maps directly onto MCP's `tools/list` and `tools/call`, so converting Odobook's JSON Schema tool definitions was mechanical. **TODO-VERIFY** once the loop is finished.
-- One API across models means the same loop can try several models without rewriting. **TODO-VERIFY** which models were tried.
+**What worked:**
+- Converse's `toolConfig` / `toolUse` / `toolResult` shape maps directly onto MCP's `tools/list` and `tools/call`, so converting Odobook's JSON Schema tool definitions was mechanical.
+- Nova 2 Lite chose the right tool with the right arguments on the first live call ("Start a work trip to Geelong" → `start_trip { kind: "business", destination: "Geelong" }`, `stopReason: tool_use`, about 1.2 s).
+- The least-privilege IAM policy (the inference profile, plus the foundation model only through that profile) worked first time.
+- Amazon models need no use-case form: the playground worked immediately, which made Nova the fastest path.
+- One API across models meant switching from Claude to Nova was a one-line model ID change.
 
-**What needs work:** **TODO-VERIFY**, pending the build. Things to record honestly once known:
-- How long model access took to enable, and whether any model needed a use-case form (and in which region, given I'm in Australia).
-- Whether tool-input schemas with `default`, `enum` and string `pattern` values (which Odobook uses) were accepted as is.
-- Any throttling or quota surprises on a new account.
-- How clear errors were when a tool schema or message order was wrong.
+**What needs work:**
+- **Claude Haiku 5.5 was refused with no reason.** After I submitted Anthropic's use-case form, the playground returned `AccessDeniedException: anthropic.claude-haiku-5-5 is not available for this account ... contact AWS Sales`. It doesn't say whether the form is still pending, whether new accounts are restricted, or what to do next. "Contact Sales" is a heavy next step for a hackathon entrant.
+- **No Australian route for Nova 2 Lite from Sydney.** It's offered only through the global profile, so requests may be served outside Australia. That matters for an app holding Australians' trip records. An AU geo profile would help.
+- **Global-profile IAM is easy to get wrong.** The policy needs the Region-less foundation-model ARN (`arn:aws:bedrock:::foundation-model/...`) as well as the Regional ones. That's documented, but there's no worked example on the model card.
 
-**Onboarding:** **TODO-VERIFY.**
+**Onboarding:** About 10 minutes from the Bedrock console to a working tool-use call, including creating the IAM user and access key. Most of that time went on the Claude refusal before switching to Nova.
 
-**Would I build with it again?** **TODO-VERIFY.**
+**Would I build with it again?** Yes. Converse plus tool use is a clean fit for MCP. I'd like Claude access on a new account to be predictable, and an AU route for Nova.
 
 ## 5. Devpost and the hackathon Discord (support)
 
