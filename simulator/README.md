@@ -5,7 +5,7 @@ against the Odobook MCP server, using a **custom "brain" powered by Amazon Bedro
 
 The simulator plays the part of an Alexa-style voice host. It links an account with OAuth 2.1 + PKCE, lists the
 server's MCP tools and turns each spoken utterance into tool calls plus a short spoken reply. The part that
-decides which tool to call and what to say is the *brain*. Here that brain is Claude on **Amazon Bedrock**,
+decides which tool to call and what to say is the *brain*. Here that brain is **Amazon Nova 2 Lite** on **Amazon Bedrock**,
 called through the **Bedrock Runtime Converse API** with the AWS SDK for JavaScript v3.
 
 ## Why (AWS Builder)
@@ -15,8 +15,9 @@ In this setup:
 
 - **Amazon Bedrock (Converse API)** is the language model behind the voice assistant. Each utterance is one or more
   `Converse` calls with the MCP server's tools passed as a Converse `toolConfig`.
-- **Bedrock cross-Region inference (AU geography)** keeps inference in Australia. Called from Sydney
-  (`ap-southeast-2`), the `au.` inference profile routes only to Sydney and Melbourne (`ap-southeast-4`).
+- **Bedrock cross-Region inference (global profile).** Called from Sydney (`ap-southeast-2`), Nova 2 Lite is offered
+  only through the `global.` inference profile, so requests may be served outside Australia. An `au.` profile (Sydney
+  and Melbourne only) would be preferable for Australians' trip records once one exists for a model the account can use.
 - **IAM** gives the app a least-privilege identity that can invoke one model through one inference profile and
   nothing else.
 
@@ -25,7 +26,7 @@ In this setup:
                            │  Brain interface: turn(utterance) -> { reply, trace }
                            ▼
                      bedrock-brain.mjs ── Converse(toolConfig = MCP tools) ──> Amazon Bedrock
-                           │                                                  (Claude, AU profile)
+                           │                                                  (Nova 2 Lite, global)
                            │  toolUse -> callTool() -> toolResult
                            ▼
                 Odobook MCP server (Cloudflare Worker, OAuth 2.1 + PKCE)
@@ -51,9 +52,13 @@ The simulator's `Brain` interface is `{ name, turn(utterance): Promise<{ reply, 
    `toolUse` block it calls the MCP tool through the simulator's own `callTool()`, which also records it in the trace
    the UI shows. It then answers with a `toolResult` block (`status: "error"` when the MCP result has `isError`). This
    repeats until the model replies with text only, for at most 6 rounds.
-3. **Reply.** The text blocks are joined into the spoken reply. The system prompt has the same intent as the
-   simulator's built-in Claude brain: one to three short sentences, no markdown, preview before confirming anything,
-   and report tool errors plainly.
+3. **Reply.** When a round is a single tool call that returns text, the brain speaks the tool's own reply (Odobook
+   writes its replies for voice) instead of asking the model to rephrase it. That's about twice as fast (≈1 s a turn)
+   and stops the model from reporting a refused call as a success, which Nova 2 Lite did in testing. Otherwise the
+   model's text blocks are joined into the spoken reply. Either way, `toSpeech()` strips markdown and joins lines. The
+   system prompt has the same intent as the simulator's built-in Claude brain: one to three short sentences, no
+   markdown, preview before confirming anything, and report tool errors plainly. `speakToolResults: false` turns the
+   pass-through off.
 4. **Errors.**
    - A Bedrock failure (access denied, throttling, a wrong model ID, missing credentials) becomes a short spoken
      sentence and the full error is logged. It is not thrown, because the simulator treats a thrown error as a dead

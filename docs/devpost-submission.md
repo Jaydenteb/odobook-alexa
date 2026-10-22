@@ -2,7 +2,7 @@
 
 Amazon "Build, Ship, Shape" hackathon. Deadline **Sat 24 Oct 2026, 6:00 am AEDT**.
 
-Items marked **TODO-VERIFY** need checking before submitting; items in `[brackets]` are placeholders.
+Items in `[brackets]` are placeholders.
 
 ---
 
@@ -100,13 +100,13 @@ Every reply is written to be spoken: one or two short sentences, with details in
 - **Project repository URL:** https://github.com/Jaydenteb/odobook-alexa
 - **GitHub username:** Jaydenteb
 - **Description of the contribution:**
-  > A pull request to mcp-voice-simulator, the community browser simulator that Alexa+ track entrants use to demo MCP servers by voice. Before it, speech input stopped at the first pause, so a natural sentence like "End trip... odometer 52,931" was cut in half and sent early. The PR makes voice input continuous, so pauses don't end the turn; sends automatically after 2 seconds of silence, so it stays hands-free; and sets the speech-recognition language from the browser's language instead of a fixed en-US, so Australian and other English speakers (and other languages) are recognised properly. I found the problem while recording Odobook's demo, where pausing to read an odometer is normal. **TODO-VERIFY** the PR's final scope and whether it's merged.
+  > A pull request to mcp-voice-simulator, the community browser simulator that Alexa+ track entrants use to demo MCP servers by voice. Before it, speech input stopped at the first pause, so a natural sentence like "End trip... odometer 52,931" was cut in half and sent early. The PR makes voice input continuous, so pauses don't end the turn; sends automatically after 2 seconds of silence, so it stays hands-free; and sets the speech-recognition language from the browser's language instead of a fixed en-US, so Australian and other English speakers (and other languages) are recognised properly. The speaker echo guard is unchanged, so the simulator's own spoken reply still isn't sent back as a new utterance. I found the problem while testing Odobook by voice, where pausing to read an odometer is normal. The PR is open and awaiting review; it was tested with the project's 172 tests, a logic harness against a fake SpeechRecognition, and by hand in Chrome with a real microphone.
 
 ## AWS Builder mini challenge
 
 - **AWS services used:** Amazon Bedrock (Converse API with tool use). Model: Amazon Nova 2 Lite via the global inference profile `global.amazon.nova-2-lite-v1:0`, called from ap-southeast-2. AWS IAM: a least-privilege user that can invoke only that model through that profile.
 - **How they're used:**
-  > A small "brain" in `simulator/` uses the Bedrock Converse API as the reasoning layer between speech and the Odobook MCP server, standing in for Alexa+'s own model. It lists Odobook's 11 tools over MCP, passes them to Converse as `toolConfig`, and loops: send the user's utterance, run any `toolUse` the model returns against Odobook's `/mcp` with the linked account's OAuth token, return the `toolResult`, and speak the model's final reply. Odobook's server-side rules (refusing "business" as a purpose, late-entry flags, no dollar estimates) apply whichever model is driving. **TODO-VERIFY** all of this against the finished code; it was being built at the time of writing.
+  > A small "brain" in `simulator/` uses the Bedrock Converse API as the reasoning layer between speech and the Odobook MCP server, standing in for Alexa+'s own model. It lists Odobook's 11 tools over MCP, passes them to Converse as `toolConfig`, and loops: send the user's utterance, run any `toolUse` the model returns against Odobook's `/mcp` with the linked account's OAuth token, and return the `toolResult`. When a turn is a single tool call, the brain speaks Odobook's own voice-ready reply instead of having the model rephrase it: in testing, Nova 2 Lite once reported a refused call as a success, and the pass-through also halves the turn time to about 1 second. Odobook's server-side rules (refusing "business" as a purpose, late-entry flags, no dollar estimates) apply whichever model is driving. The brain has 19 unit tests with a mocked Bedrock client, and the IAM user can invoke only Nova 2 Lite through that one inference profile (policy in `simulator/README.md`).
 
 ## Testing instructions for judges
 
@@ -118,14 +118,16 @@ Every reply is written to be spoken: one or two short sentences, with details in
   `curl -i -X POST https://odobook-alexa.odobook-alexa.workers.dev/mcp -H "content-type: application/json" -d "{}"`
 
 **Try it by voice with the simulator:**
-1. Demo account: email `[demo email]`, password `[demo password]`. It has a 12-week AU logbook for a Toyota HiLux with three weeks of trips. (Or create your own account on the sign-in page; it takes 20 seconds.)
-2. Open mcp-voice-simulator (the copy in this repo's `simulator/` folder, or `npm i -g mcp-voice-simulator`), and add the MCP server URL `https://odobook-alexa.odobook-alexa.workers.dev/mcp`.
-3. Odobook only accepts pre-registered clients (as Alexa+ requires), so use client ID `MlV6mKfokdySIpfd` (a public client registered for loopback redirects on any port).
-4. Click to link the account. The "Link Odobook" page opens; sign in with the demo account and you're sent back to the simulator.
+1. Demo account: email `demo@odobook.example`, password [given in the Devpost testing instructions; kept out of the public repo]. It has a 12-week AU logbook for a Toyota HiLux with three weeks of trips. Please leave the logbook open (don't close or discard it) so the next judge sees the same data. (Or create your own account on the sign-in page; it takes 20 seconds.)
+2. Run the simulator from this repo's `simulator/` folder (Node 22+): `npm install --ignore-scripts`, then
+   `MCP_URL=https://odobook-alexa.odobook-alexa.workers.dev/mcp MCP_CLIENT_ID=MlV6mKfokdySIpfd node run.mjs`
+   with either your own AWS profile that can use Nova 2 Lite (`AWS_PROFILE=... AWS_REGION=ap-southeast-2`, the default Bedrock brain) or `SIM_BRAIN=claude ANTHROPIC_API_KEY=...`. Then open http://127.0.0.1:8790.
+3. Odobook only accepts pre-registered clients (as Alexa+ requires). `MlV6mKfokdySIpfd` is a public client registered for loopback redirects on any port, so it works for any judge running the simulator locally.
+4. Click **Link account ↗**. The "Link Odobook" page opens; sign in with the demo account and you're sent back to the simulator.
 5. Allow the microphone and try:
    - "How's my logbook going?"
    - "Start a work trip to Torquay."
-   - "End trip, odometer [last reading + 24]. It was for business." (refused: needs a specific purpose)
+   - "End trip, odometer [the starting reading it just told you, plus 24]. It was for business." (refused: needs a specific purpose)
    - "Quote for a bathroom renovation." (logged, with business %)
    - "I forgot to log yesterday's 30 km drive to Lara for a hot water service." (flagged if more than a day late)
    - "Export my logbook."

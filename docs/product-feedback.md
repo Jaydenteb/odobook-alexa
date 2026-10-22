@@ -1,6 +1,6 @@
 # Product feedback: Amazon tools used for Odobook
 
-Amazon "Build, Ship, Shape" hackathon, Alexa+ track. Written by Jayden Tebble from the friction log kept while building (`friction-log.md`), which is the source of truth for the dates and errors below. Items marked **TODO-VERIFY** are pending and will be filled in before submission.
+Amazon "Build, Ship, Shape" hackathon, Alexa+ track. Written by Jayden Tebble from the friction log kept while building (`friction-log.md`), which is the source of truth for the dates and errors below.
 
 Summary: the published Alexa+ MCP requirements are clear and standards-based, and building to them was the best part of the week. The biggest problem was discovering, after an hour of setup, that the toolchain is partner-only, from an error message that didn't say so.
 

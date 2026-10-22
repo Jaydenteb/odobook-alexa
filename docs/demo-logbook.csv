@@ -1,0 +1,12 @@
+date,start_time,end_time,start_odometer_km,end_odometer_km,distance_km,kind,purpose,destination,late_entry
+2026-10-02,7:10,7:44,52310,52334,24,business,Rough-in plumbing at a new build in Armstrong Creek,Armstrong Creek,
+2026-10-03,6:55,7:20,52334,52349,15,business,Pick up hot water units from the plumbing supplier,North Geelong,
+2026-10-04,7:30,10:36,52349,52525,176,business,"Site inspection for a cafe fit-out in Ballarat, return trip",Ballarat,
+2026-10-07,8:40,9:26,52531,52567,36,private,,Torquay,
+2026-10-09,7:05,7:28,52567,52580,13,business,Bathroom renovation in Belmont: strip-out and rough-in,Belmont,
+2026-10-10,6:30,9:10,52580,52730,150,business,"Coordination meeting with the builder at the Docklands site office, return trip",Docklands,
+2026-10-12,17:45,19:01,52734,52800,66,private,,Werribee,
+2026-10-13,13:20,13:58,52800,52828,28,business,Emergency callout for a burst pipe in Lara,Lara,yes
+2026-10-16,8:15,8:37,52828,52840,12,business,Quote for a gas heater install in Highton,Highton,
+2026-10-18,7:20,8:12,52840,52882,42,business,Replace a hot water service in Ocean Grove,Ocean Grove,
+2026-10-20,7:40,8:15,52882,52907,25,business,Fit-off and pressure test at the Armstrong Creek new build,Armstrong Creek,

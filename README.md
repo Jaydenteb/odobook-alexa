@@ -150,10 +150,10 @@ It returns `clientId` (and `clientSecret` for confidential clients; omit `"publi
 
 ## Demo with the voice simulator
 
-The demo uses the community [mcp-voice-simulator](https://github.com/AlSayedGamal/mcp-voice-simulator) as an Alexa+ stand-in, with Claude as the brain.
+The demo uses the community [mcp-voice-simulator](https://github.com/AlSayedGamal/mcp-voice-simulator) as an Alexa+ stand-in. The brain that picks tools is Amazon Nova 2 Lite on Amazon Bedrock (see [simulator/README.md](simulator/README.md)); the simulator's built-in Claude brain also works.
 
 1. Register a public client as above and note its `clientId`.
-2. Point the simulator at `https://<your-worker>/mcp` with that client ID, and put `ANTHROPIC_API_KEY` in its `.env` (never committed).
+2. Point the simulator at `https://<your-worker>/mcp` with that client ID. For the Bedrock brain, set `SIM_BRAIN=bedrock` and an AWS profile; for the Claude brain, put `ANTHROPIC_API_KEY` in its `.env` (never committed).
 3. Start the simulator, link the account in the browser window it opens (create an account or sign in), then talk to it.
 
 A Bedrock-based brain for the simulator lives under [`simulator/`](simulator/README.md), with its own setup steps.
@@ -176,7 +176,7 @@ A Bedrock-based brain for the simulator lives under [`simulator/`](simulator/REA
 - [`docs/`](docs/): demo script, Devpost write-up and product feedback.
 - [`friction-log.md`](friction-log.md): what went wrong with the Alexa+ tooling and what we did instead.
 - [`simulator/README.md`](simulator/README.md): the Bedrock brain for the voice simulator.
-- `scripts/seed-demo.mjs`: seeds a demo logbook.
+- `scripts/seed-demo.mjs`: seeds a demo logbook through the MCP tools (three weeks of a Geelong plumber's trips). Because every trip is entered on seeding day, Odobook correctly flags them all as late. `scripts/demo-ontime.sql` (run with `wrangler d1 execute --remote --file`) then gives the demo account's trips realistic end times and marks them as logged live, except one (the Lara callout), so the demo shows the late-entry flag once. This is made-up demo data; real accounts are never edited this way.
 
 ## License
 
