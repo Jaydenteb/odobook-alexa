@@ -130,7 +130,7 @@ Every reply is written to be spoken: one or two short sentences, with details in
    - "Start a work trip to Torquay."
    - "End trip, odometer [the starting reading it just told you, plus 24]. It was for business." (refused: needs a specific purpose)
    - "Quote for a bathroom renovation." (logged, with business %)
-   - "I forgot to log yesterday's 30 km drive to Lara for a hot water service." (flagged if more than a day late)
+   - "I forgot to log a trip the day before yesterday: 64 km to Bannockburn and back, quoting a rainwater tank install." (logged and marked late)
    - "Export my logbook."
 6. Without a microphone, type the same sentences.
 
