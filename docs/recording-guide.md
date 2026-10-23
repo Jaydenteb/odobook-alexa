@@ -121,19 +121,18 @@ Press **Win+Alt+R** to stop.
 - **It went badly wrong and you want to start over:** tell Claude **"reset for take"** and record Clip 2 again from the start.
 - **The mic doesn't react:** click the address bar's mic icon and choose **Allow**, then try again.
 
-**After Clip 2, tell Claude: "refresh the CSV".** That updates the spreadsheet for Clip 3.
-
 ---
 
-### Clip 3: The spreadsheet (about 10 seconds)
-1. In File Explorer, open `alexa-logbook\docs\demo-logbook.csv`. It opens in Excel.
-2. Widen the columns: click the top-left corner to select everything, then double-click any column edge.
-3. Click Excel, press **Win+Alt+R**.
+### Clip 3: The spreadsheet (about 15 seconds)
+**Window:** the voice app (same window as Clip 2). Click it, press **Win+Alt+R**.
+
+🎙 **SAY TO ODOBOOK:** "Export my logbook for my accountant."
+⏸ Wait. A **Logbook export** table slides in under the reply.
 
 🗣 **SAY TO THE VIEWER:**
-> "Every trip: date, times, odometer, distance, purpose, and whether it was entered late."
+> "Every trip: date, times, odometer, distance, purpose, and whether it was entered late. One click downloads it for my accountant."
 
-Press **Win+Alt+R** to stop.
+Click **Download CSV**, then press **Win+Alt+R** to stop.
 
 ---
 
