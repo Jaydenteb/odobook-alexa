@@ -1,5 +1,7 @@
 # Odobook demo video script
 
+**Recording it? Use the simpler step-by-step version: [recording-guide.md](recording-guide.md).** This file is the detailed shot list behind it.
+
 Target length: **2:45** (hard stop before 3:00; judges needn't watch past it). The best material, a real voice exchange with a refusal, is in the first 30 seconds.
 
 ## Before you record
