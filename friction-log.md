@@ -48,3 +48,34 @@ Entries are written as things happen. Times are Melbourne (AEDT).
 
 - Pre-registered clients (no DCR), S256-only PKCE, RFC 8707 `resource` and RFC 8414/9728 metadata were all supported by an off-the-shelf library. Apart from entry 3, the whole Alexa+ auth checklist passed in our end-to-end test on the first run.
 - Measured round trips were 8–25 ms locally against the 500 ms budget. The budget is generous for a stateless JSON-mode Streamable HTTP server.
+
+## 5. Amazon Bedrock: Claude refused with no reason after the use-case form
+
+- **When:** Tue 20 Oct 2026
+- **Task:** Use Claude Haiku 5.5 on Bedrock (`au.anthropic.claude-haiku-5-5`) as the voice demo's brain, for the AWS Builder challenge.
+- **Steps taken:** Opened the Bedrock console in Sydney, submitted Anthropic's use-case form, then tried the model in the playground.
+- **Expected:** The model to answer once the form was submitted.
+- **Actual:** `AccessDeniedException: ... is not available for this account ... contact AWS Sales`. Nothing said whether the form was still pending, whether new accounts are restricted, or what to do next.
+- **Severity:** Medium. It blocked the planned model; "contact AWS Sales" is a heavy next step for a hackathon entrant.
+- **Workaround:** Switched to Amazon Nova 2 Lite, which needs no form and worked straight away. Switching was a one-line model ID change thanks to the Converse API.
+- **Suggestion:** Say why access is denied (form pending, account too new, Region) and when to retry, or show the model's access status on the model card.
+
+## 6. Amazon Bedrock: Nova 2 Lite reported a refused tool call as a success
+
+- **Task:** Drive Odobook's MCP tools from speech with the Converse API's tool use.
+- **Steps taken:** Said "End trip, odometer 52,931. It was for business." Nova called `end_trip`; Odobook returned `status: "error"` asking for a specific purpose (the ATO doesn't accept "business").
+- **Expected:** The spoken reply to pass on the question.
+- **Actual:** Nova's follow-up said "Your trip to Geelong is now recorded." It also put bullet lists and line breaks into replies meant to be spoken.
+- **Severity:** High for a records app: the driver would believe a trip was logged when it wasn't.
+- **Workaround:** When a turn is a single tool call, the brain speaks the MCP server's own voice-ready reply instead of the model's rephrasing, and strips markdown. That's faithful and about twice as fast (≈1 s a turn instead of ≈2.2 s).
+- **Suggestion:** A Converse option to return a tool's text as the final answer, and a voice/plain-text output mode that avoids markdown.
+
+## 7. Amazon Bedrock: no Australian route for Nova 2 Lite, and global-profile IAM is easy to get wrong
+
+- **Task:** Call Nova 2 Lite from Sydney with a least-privilege IAM user.
+- **Steps taken:** Looked for an `au.` inference profile, then wrote a policy for the `global.` profile.
+- **Expected:** An AU geography profile (like the Claude models have), and a policy on the profile plus the Regional model ARNs to be enough.
+- **Actual:** Nova 2 Lite is offered from Sydney only through the global profile, so requests may be served outside Australia, which matters for Australians' trip records. The policy also needs the Region-less foundation-model ARN (`arn:aws:bedrock:::foundation-model/...`), which is documented but has no worked example on the model card.
+- **Severity:** Low to medium (works, but with a data-residency trade-off).
+- **Workaround:** Used the global profile with a `bedrock:InferenceProfileArn` condition so the user can reach the model only through that one profile. The working policy is in `simulator/README.md`.
+- **Suggestion:** Offer an AU geography profile for Nova 2 Lite, and put a least-privilege policy example for the global profile on the model card.
