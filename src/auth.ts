@@ -34,12 +34,12 @@ const HTML_HEADERS = {
 const esc = (s: string) =>
   s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 
-function page(title: string, body: string, status = 200): Response {
+function page(title: string, body: string, status = 200, wide = false): Response {
   return new Response(
     `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${esc(title)}</title><style>
-:root{color-scheme:light dark;--bg:#f6f7f9;--card:#fff;--ink:#14171c;--muted:#5b6472;--line:#d9dde3;--accent:#0b6bcb;--warn:#a33}
-@media (prefers-color-scheme:dark){:root{--bg:#0f1216;--card:#181c22;--ink:#e8ebef;--muted:#9aa3ae;--line:#2a3039;--accent:#5aa7f0;--warn:#f08a8a}}
+:root{color-scheme:light dark;--bg:#f6f7f9;--card:#fff;--ink:#14171c;--muted:#5b6472;--line:#d9dde3;--accent:#0b6bcb;--on-accent:#fff;--warn:#a33}
+@media (prefers-color-scheme:dark){:root{--bg:#0f1216;--card:#181c22;--ink:#e8ebef;--muted:#9aa3ae;--line:#2a3039;--accent:#5aa7f0;--on-accent:#06233d;--warn:#f08a8a}}
 body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,-apple-system,Segoe UI,sans-serif}
 main{max-width:440px;margin:40px auto;padding:0 16px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:24px}
@@ -50,7 +50,22 @@ button{margin-top:18px;width:100%;padding:11px;border:0;border-radius:10px;backg
 a.switch{display:block;margin-top:12px;padding:10px;border:1px solid var(--line);border-radius:10px;text-align:center;color:var(--muted);text-decoration:none}
 ul{padding-left:20px;color:var(--muted)}.err{color:var(--warn)}.small{font-size:13px}
 a{color:var(--accent)}
-</style></head><body><main>${body}</main></body></html>`,
+main.wide{max-width:880px;margin:0 auto;padding:clamp(32px,8vh,96px) 16px 48px}
+.kicker{font-size:14px;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);margin:0 0 12px;font-weight:600}
+.hero h1{font-size:clamp(44px,8vw,80px);line-height:1;letter-spacing:-.02em;margin:0}
+.hero .tag{font-size:clamp(22px,3.4vw,32px);color:var(--ink);margin:10px 0 18px;font-weight:600}
+.hero .lede{font-size:clamp(17px,2vw,20px);max-width:640px;margin:0 0 36px}
+.chat{display:flex;flex-direction:column;gap:10px;margin:0 0 36px}
+.say,.reply{margin:0;color:var(--ink);max-width:min(560px,88%);padding:12px 16px;border-radius:16px;font-size:clamp(16px,1.8vw,18px);line-height:1.4}
+.say{align-self:flex-end;background:var(--accent);color:var(--on-accent);border-bottom-right-radius:4px}
+.reply{align-self:flex-start;background:var(--card);border:1px solid var(--line);border-bottom-left-radius:4px}
+.reply.no{border-color:var(--warn)}
+.who{display:block;font-size:12px;opacity:.75;margin-bottom:2px}
+.facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin:0 0 32px;padding:0;list-style:none}
+.facts li{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;color:var(--muted);font-size:15px}
+.facts b{display:block;color:var(--ink);font-size:17px;margin-bottom:4px}
+.foot{font-size:14px;border-top:1px solid var(--line);padding-top:16px}
+</style></head><body><main${wide ? ' class="wide"' : ""}>${body}</main></body></html>`,
     { status, headers: HTML_HEADERS },
   );
 }
@@ -215,9 +230,24 @@ async function handleAdminClients(request: Request, env: Env): Promise<Response>
 
 // ---------------------------------------------------------------- static pages
 
-const LANDING = `<div class="card"><h1>Odobook</h1>
-<p>A voice car logbook. Say "start a work trip to Geelong" when you leave and "end trip" when you arrive. Odobook keeps the ATO 12-week logbook (or an IRS mileage log) for you.</p>
-<p class="small">MCP endpoint: <code>/mcp</code> · Built to the Alexa+ add-on requirements (Streamable HTTP, OAuth 2.1 + PKCE). <a href="/privacy">Privacy</a> · <a href="/terms">Terms</a></p></div>`;
+const LANDING = `<div class="hero">
+<p class="kicker">Alexa+ add-on · MCP server</p>
+<h1>Odobook</h1>
+<p class="tag">A car logbook you talk to.</p>
+<p class="lede">Say the trip when you leave and when you arrive. Odobook keeps the ATO 12-week logbook (or an IRS mileage log): every trip, the odometer readings and a real purpose, without typing while you drive.</p>
+</div>
+<div class="chat" aria-label="Example conversation">
+<p class="say"><span class="who">You</span>Start a work trip to Torquay.</p>
+<p class="reply"><span class="who">Odobook</span>Work trip to Torquay started at 9:12 am, from 52,907 km. Drive safely.</p>
+<p class="say"><span class="who">You</span>End trip, odometer 52,931. It was for business.</p>
+<p class="reply no"><span class="who">Odobook</span>What was the trip for? The tax office needs a specific purpose, like "site visit at the Werribee depot", not just "business".</p>
+</div>
+<ul class="facts">
+<li><b>Asks for a real purpose</b>"Business" isn't one, so it asks, one question at a time.</li>
+<li><b>Flags late entries</b>Trips added more than a day later are marked, as the ATO expects.</li>
+<li><b>Ready for your accountant</b>Business-use percentage and a CSV export. Never a dollar estimate.</li>
+</ul>
+<p class="foot">MCP endpoint <code>/mcp</code> · Streamable HTTP, OAuth 2.1 + PKCE, built to the Alexa+ add-on requirements · <a href="https://github.com/Jaydenteb/odobook-alexa">GitHub</a> · <a href="/privacy">Privacy</a> · <a href="/terms">Terms</a></p>`;
 
 const PRIVACY = `<div class="card"><h1>Privacy</h1>
 <p>Odobook stores your name, email, a salted password hash, your vehicle details and the trips you log. It uses them only to keep your logbook and answer your requests.</p>
@@ -238,7 +268,7 @@ export const defaultHandler: ExportedHandler<Env> = {
       case "/admin/clients":
         return handleAdminClients(request, env);
       case "/":
-        return page("Odobook", LANDING);
+        return page("Odobook", LANDING, 200, true);
       case "/privacy":
         return page("Odobook privacy", PRIVACY);
       case "/terms":
