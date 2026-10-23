@@ -1,0 +1,662 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Odobook Drive · voice simulator</title>
+<!--
+  Odobook's skin for mcp-voice-simulator (MIT, github.com/AlSayedGamal/mcp-voice-simulator).
+  The page logic (linking, turns, speech, MCP Apps views) is the package's own, with the continuous
+  voice input from PR #10. Added here: the instrument cluster, which reads logbook_status and
+  list_trips through the simulator's view tool-call route (read-only, never through the brain).
+-->
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #07090d; --bg2: #0b0f15; --panel: #10151d; --panel2: #141a24; --line: #212a36;
+    --text: #eef2f7; --muted: #8b95a5; --faint: #5b6574;
+    --accent: #38bdf8; --accent-ink: #03202e; --amber: #ffb547; --ok: #34d399; --err: #ff6b6b;
+    --glow: 0 0 0 1px rgba(56,189,248,.25), 0 0 32px rgba(56,189,248,.18);
+  }
+  * { box-sizing: border-box; }
+  html { background: var(--bg); }
+  body { margin: 0; min-height: 100vh; color: var(--text); font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+         background: radial-gradient(1200px 600px at 70% -10%, rgba(56,189,248,.10), transparent 60%),
+                     radial-gradient(900px 500px at -10% 110%, rgba(255,181,71,.06), transparent 60%), var(--bg); }
+  button, input, select { font: inherit; color: inherit; }
+  .num { font-variant-numeric: tabular-nums; }
+
+  /* ---- top bar */
+  header { display: flex; align-items: center; gap: 14px; padding: 14px 24px; border-bottom: 1px solid var(--line);
+           background: rgba(7,9,13,.7); backdrop-filter: blur(8px); position: sticky; top: 0; z-index: 5; }
+  .brand { display: flex; align-items: center; gap: 10px; text-decoration: none; color: var(--text); }
+  .brand b { font-size: 19px; letter-spacing: -.01em; }
+  .brand small { color: var(--muted); font-size: 13px; }
+  .status { margin-left: auto; display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 6px 12px; color: var(--muted); font-size: 13px; }
+  .pill { display: inline-flex; align-items: center; gap: 7px; padding: 5px 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--panel); }
+  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+  .dot.ok { background: var(--ok); box-shadow: 0 0 10px var(--ok); } .dot.bad { background: var(--err); box-shadow: 0 0 10px var(--err); }
+  a.linkbtn, .btn-primary { background: var(--accent); color: var(--accent-ink); border: 0; border-radius: 999px; padding: 7px 16px; font-weight: 650; text-decoration: none; cursor: pointer; box-shadow: var(--glow); }
+  a.linkbtn { animation: beckon 1.8s ease-in-out infinite; }
+  @keyframes beckon { 50% { box-shadow: 0 0 0 1px rgba(56,189,248,.5), 0 0 40px rgba(56,189,248,.45); } }
+  .status button { background: var(--panel2); border: 1px solid var(--line); border-radius: 999px; padding: 5px 12px; cursor: pointer; }
+
+  main { max-width: 1440px; margin: 0 auto; padding: 20px 24px 28px; display: grid; gap: 20px; grid-template-columns: minmax(0, 1fr); }
+  @media (min-width: 1100px) { main { grid-template-columns: minmax(0, 1fr) 400px; } }
+  .card { background: linear-gradient(180deg, var(--panel2), var(--panel)); border: 1px solid var(--line); border-radius: 18px; }
+  h2 { font-size: 12px; font-weight: 650; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); margin: 0 0 10px; }
+
+  /* ---- instrument cluster */
+  .cluster { display: grid; grid-template-columns: 1.05fr 1.3fr 1fr; gap: 0; padding: 0; overflow: hidden; }
+  .cluster > div { padding: 18px 20px; min-width: 0; }
+  .cluster > div + div { border-left: 1px solid var(--line); }
+  @media (max-width: 760px) { .cluster { grid-template-columns: 1fr; } .cluster > div + div { border-left: 0; border-top: 1px solid var(--line); } }
+  .gauge { position: relative; width: 100%; max-width: 230px; margin: 0 auto; }
+  .gauge svg { display: block; width: 100%; height: auto; overflow: visible; }
+  .gauge .track { stroke: var(--line); }
+  .gauge .fill { stroke: url(#gaugeGrad); transition: stroke-dashoffset 1.4s cubic-bezier(.2,.8,.2,1); filter: drop-shadow(0 0 6px rgba(56,189,248,.55)); }
+  .gauge .needle { transform-origin: 100px 100px; transition: transform 1.4s cubic-bezier(.2,.8,.2,1); }
+  .gauge .tick { stroke: var(--faint); }
+  .gauge .readout { text-align: center; margin-top: 2px; }
+  .gauge .pct { font-size: 32px; line-height: 1.1; font-weight: 700; letter-spacing: -.02em; }
+  .gauge .lbl { color: var(--muted); font-size: 12px; margin-top: -4px; }
+  .split { display: flex; justify-content: space-between; color: var(--muted); font-size: 12px; margin-top: 10px; }
+  .split b { color: var(--text); font-weight: 600; }
+
+  .odo { display: inline-flex; gap: 3px; padding: 8px 10px; background: #020305; border: 1px solid #2b2418; border-radius: 10px;
+         box-shadow: inset 0 2px 12px rgba(0,0,0,.8), 0 0 24px rgba(255,181,71,.08); }
+  .odo .d { position: relative; width: .72em; height: 1.2em; overflow: hidden; font: 700 40px/1.2 ui-monospace, "Cascadia Mono", Consolas, monospace;
+            color: var(--amber); text-shadow: 0 0 12px rgba(255,181,71,.55); background: linear-gradient(#0d0a05, #17120a 50%, #0d0a05); border-radius: 4px; }
+  .odo .d .col { position: absolute; left: 0; right: 0; top: 0; text-align: center; transition: transform 1.2s cubic-bezier(.2,.8,.2,1); }
+  .odo .d .col span { display: block; height: 1.2em; }
+  .odo .sep { align-self: flex-end; color: var(--amber); font: 700 32px/1 ui-monospace, monospace; opacity: .7; margin: 0 1px 6px; }
+  .odo-unit { color: var(--muted); font-size: 14px; margin-left: 8px; }
+  .odo-row { display: flex; align-items: flex-end; flex-wrap: wrap; }
+  .trip { display: flex; align-items: center; gap: 10px; margin-top: 16px; padding: 10px 12px; border-radius: 12px; background: var(--bg2); border: 1px solid var(--line); min-height: 48px; }
+  .lamp { flex: none; width: 12px; height: 12px; border-radius: 50%; background: #253041; }
+  .trip[data-on="true"] { border-color: rgba(52,211,153,.5); }
+  .trip[data-on="true"] .lamp { background: var(--ok); box-shadow: 0 0 14px var(--ok); animation: breathe 1.6s ease-in-out infinite; }
+  @keyframes breathe { 50% { opacity: .45; } }
+  .trip .t1 { font-weight: 600; } .trip .t2 { color: var(--muted); font-size: 13px; }
+  .lights { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; min-height: 26px; }
+  .light { display: inline-flex; gap: 6px; align-items: center; font-size: 12px; color: var(--amber); border: 1px solid rgba(255,181,71,.35);
+           background: rgba(255,181,71,.07); padding: 3px 9px; border-radius: 999px; animation: pop .35s ease-out both; }
+  .light.okl { color: var(--ok); border-color: rgba(52,211,153,.35); background: rgba(52,211,153,.07); }
+
+  .weeks { display: grid; grid-template-columns: repeat(12, 1fr); gap: 4px; margin: 6px 0 12px; }
+  .weeks i { height: 30px; border-radius: 4px; background: var(--bg2); border: 1px solid var(--line); position: relative; overflow: hidden; }
+  .weeks i::after { content: ""; position: absolute; inset: 0; transform-origin: left; transform: scaleX(var(--f, 0));
+                    background: linear-gradient(90deg, rgba(56,189,248,.65), var(--accent)); transition: transform .9s cubic-bezier(.2,.8,.2,1); transition-delay: calc(var(--i) * 60ms); }
+  .big { font-size: 30px; font-weight: 700; letter-spacing: -.02em; }
+  .big small { font-size: 15px; color: var(--muted); font-weight: 500; letter-spacing: 0; }
+  .sub { color: var(--muted); font-size: 13px; }
+  .car { margin-top: 14px; padding-top: 12px; border-top: 1px dashed var(--line); color: var(--muted); font-size: 13px; }
+  .car b { color: var(--text); font-weight: 600; display: block; font-size: 15px; }
+
+  /* ---- voice console */
+  .console { margin-top: 20px; padding: 22px; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 24px; align-items: center; position: relative; overflow: hidden; }
+  @media (max-width: 760px) { .console { grid-template-columns: 1fr; justify-items: center; text-align: center; padding: 18px; } .console > div { width: 100%; min-width: 0; }
+    .chips { justify-content: center; } header { padding: 12px 16px; } .status .host, .status .brain, .brand small { display: none; } main { padding: 16px; } }
+  .micwrap { position: relative; width: 132px; height: 132px; display: grid; place-items: center; }
+  .micwrap::before, .micwrap::after { content: ""; position: absolute; inset: 8px; border-radius: 50%; border: 2px solid var(--accent); opacity: 0; }
+  .console[data-state="listening"] .micwrap::before { animation: ripple 1.6s ease-out infinite; }
+  .console[data-state="listening"] .micwrap::after { animation: ripple 1.6s ease-out .8s infinite; }
+  @keyframes ripple { from { transform: scale(.9); opacity: .7; } to { transform: scale(1.5); opacity: 0; } }
+  #mic { width: 104px; height: 104px; border-radius: 50%; border: 0; cursor: pointer; position: relative; z-index: 1; display: grid; place-items: center;
+         background: radial-gradient(circle at 35% 30%, #1c2533, #0c1118 70%); box-shadow: inset 0 0 0 2px var(--line), 0 10px 30px rgba(0,0,0,.5); transition: transform .15s, box-shadow .2s; }
+  #mic:hover { box-shadow: inset 0 0 0 2px var(--accent), var(--glow); }
+  #mic:active { transform: scale(.96); }
+  #mic svg { width: 40px; height: 40px; color: var(--accent); }
+  #mic[aria-pressed="true"] { background: radial-gradient(circle at 35% 30%, #5fd0ff, #0ea5e9 70%); box-shadow: 0 0 0 6px rgba(56,189,248,.18), 0 0 50px rgba(56,189,248,.6); }
+  #mic[aria-pressed="true"] svg { color: var(--accent-ink); }
+  #mic:disabled { opacity: .4; cursor: default; }
+  .console[data-state="thinking"] .micwrap .spin { opacity: 1; }
+  .spin { position: absolute; inset: 0; border-radius: 50%; opacity: 0; transition: opacity .2s;
+          background: conic-gradient(from 0deg, transparent 0 70%, var(--accent)); -webkit-mask: radial-gradient(circle, transparent 60px, #000 61px); mask: radial-gradient(circle, transparent 60px, #000 61px); animation: rot 1s linear infinite; }
+  @keyframes rot { to { transform: rotate(1turn); } }
+  .miclabel { position: absolute; bottom: -22px; left: 0; right: 0; text-align: center; font-size: 12px; color: var(--muted); }
+  .wave { display: flex; gap: 4px; height: 18px; align-items: center; margin-bottom: 8px; opacity: 0; transition: opacity .2s; }
+  .wave i { width: 4px; height: 100%; border-radius: 2px; background: var(--accent); animation: eq 1s ease-in-out infinite; transform-origin: center; }
+  .wave i:nth-child(2) { animation-delay: .15s } .wave i:nth-child(3) { animation-delay: .3s } .wave i:nth-child(4) { animation-delay: .45s } .wave i:nth-child(5) { animation-delay: .6s }
+  @keyframes eq { 0%, 100% { transform: scaleY(.25) } 50% { transform: scaleY(1) } }
+  .console[data-state="listening"] .wave { opacity: 1; }
+  .screen { position: relative; min-height: 150px; display: flex; flex-direction: column; justify-content: center; }
+  .heard { color: var(--muted); font-size: 18px; min-height: 1.5em; font-style: italic; }
+  .reply { font-size: clamp(22px, 2.3vw, 30px); line-height: 1.3; font-weight: 550; letter-spacing: -.01em; }
+  .reply.fresh { animation: rise .45s cubic-bezier(.2,.8,.2,1) both; }
+  @keyframes rise { from { opacity: 0; transform: translateY(8px); } }
+  @keyframes pop { from { opacity: 0; transform: scale(.9); } }
+  .hint { color: var(--muted); font-weight: 450; }
+  .confirm { margin-top: 14px; display: none; gap: 10px; }
+  .screen[data-confirm="true"] .confirm { display: flex; }
+  .confirm button { border-radius: 999px; padding: 8px 18px; border: 1px solid var(--line); background: var(--panel2); cursor: pointer; }
+  .confirm button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 650; }
+  /* An MCP Apps view, when a turn returns one (Odobook's tools don't, but the host supports them). */
+  .view { display: none; position: absolute; inset: 0; z-index: 1; }
+  .view iframe { width: 100%; height: 100%; border: 0; display: block; }
+  .caption { display: none; }
+  .screen[data-ui="true"] { min-height: 320px; }
+  .screen[data-ui="true"] .view { display: block; }
+  .screen[data-ui="true"] .heard, .screen[data-ui="true"] .reply, .screen[data-ui="true"] .confirm { display: none !important; }
+
+  .controls { display: flex; gap: 8px; margin-top: 16px; }
+  .controls input { flex: 1; min-width: 0; background: var(--bg2); border: 1px solid var(--line); border-radius: 999px; padding: 11px 18px; outline: none; }
+  .controls input:focus { border-color: var(--accent); box-shadow: var(--glow); }
+  .controls button { border-radius: 999px; border: 1px solid var(--line); background: var(--panel2); padding: 0 16px; cursor: pointer; min-height: 44px; }
+  .controls button:hover { border-color: var(--accent); }
+  .controls #send { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 650; }
+  .controls button[aria-pressed="false"] { color: var(--faint); }
+  .controls button:disabled { opacity: .5; cursor: default; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  .chips button { font-size: 13px; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--line); background: transparent; color: var(--muted); cursor: pointer; transition: color .15s, border-color .15s; }
+  .chips button:hover { color: var(--text); border-color: var(--accent); }
+
+  /* ---- conversation */
+  aside { display: grid; gap: 16px; align-content: start; min-width: 0; }
+  aside .card { padding: 16px; }
+  .log { max-height: calc(100vh - 290px); min-height: 220px; overflow: auto; display: flex; flex-direction: column; gap: 10px; padding-right: 4px; scroll-behavior: smooth; }
+  .log:empty::before { content: "Your conversation and every MCP call Odobook answers show up here."; color: var(--faint); font-size: 13px; }
+  .turn { display: flex; flex-direction: column; gap: 6px; animation: rise .35s ease-out both; }
+  .turn .you { align-self: flex-end; max-width: 88%; background: var(--accent); color: var(--accent-ink); padding: 8px 12px; border-radius: 14px 14px 4px 14px; font-weight: 500; }
+  .turn .said { align-self: flex-start; max-width: 92%; background: var(--panel2); border: 1px solid var(--line); padding: 8px 12px; border-radius: 14px 14px 14px 4px; }
+  details { border: 1px solid var(--line); border-radius: 10px; padding: 5px 10px; font-size: 12px; background: var(--bg2); }
+  summary { cursor: pointer; color: var(--accent); font-family: ui-monospace, Consolas, monospace; list-style: none; }
+  summary::-webkit-details-marker { display: none; }
+  summary::before { content: "▸ "; color: var(--faint); } details[open] summary::before { content: "▾ "; }
+  summary .ms { color: var(--muted); float: right; }
+  summary.error { color: var(--err); }
+  pre { margin: 6px 0 2px; white-space: pre-wrap; word-break: break-word; font: 12px/1.45 ui-monospace, Consolas, monospace; color: var(--muted); }
+  .note { color: var(--muted); font-size: 12px; } .note.warn { color: var(--amber); }
+  .tools { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .tools span { font: 12px ui-monospace, Consolas, monospace; background: var(--bg2); border: 1px solid var(--line); border-radius: 6px; padding: 2px 7px; color: var(--muted); }
+  aside details.toolbox { background: transparent; border: 0; padding: 0; font-size: 13px; }
+  aside details.toolbox summary { font-family: inherit; font-size: 12px; font-weight: 650; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+  .disclaimer { max-width: 1440px; margin: 0 auto; padding: 0 24px 24px; color: var(--faint); font-size: 12px; }
+  .disclaimer a { color: inherit; }
+  @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+</style>
+</head>
+<body>
+<header>
+  <a class="brand" href="https://odobook-alexa.odobook-alexa.workers.dev/" target="_blank" rel="noopener noreferrer">
+    <svg width="34" height="34" viewBox="0 0 34 34" aria-hidden="true"><defs><linearGradient id="lg" x1="0" x2="1"><stop offset="0" stop-color="#38bdf8"/><stop offset="1" stop-color="#34d399"/></linearGradient></defs>
+      <rect width="34" height="34" rx="9" fill="#10151d" stroke="#212a36"/><path d="M7 22a10 10 0 0 1 20 0" fill="none" stroke="url(#lg)" stroke-width="3" stroke-linecap="round"/><path d="M17 22l6-7" stroke="#ffb547" stroke-width="2.5" stroke-linecap="round"/><circle cx="17" cy="22" r="2.2" fill="#eef2f7"/></svg>
+    <span><b>Odobook</b> <small>Drive · voice logbook</small></span>
+  </a>
+  <div class="status" id="status"><span class="pill"><i class="dot"></i>Connecting…</span></div>
+</header>
+
+<main>
+  <section>
+    <div class="card cluster" id="cluster" aria-live="polite">
+      <div>
+        <h2>Business use</h2>
+        <div class="gauge">
+          <svg viewBox="0 0 200 110" aria-hidden="true">
+            <defs><linearGradient id="gaugeGrad" x1="0" x2="1"><stop offset="0" stop-color="#0ea5e9"/><stop offset=".7" stop-color="#38bdf8"/><stop offset="1" stop-color="#34d399"/></linearGradient></defs>
+            <path class="track" d="M20 100 A80 80 0 0 1 180 100" fill="none" stroke-width="12" stroke-linecap="round"/>
+            <path class="fill" id="gFill" d="M20 100 A80 80 0 0 1 180 100" fill="none" stroke-width="12" stroke-linecap="round" pathLength="100" stroke-dasharray="100" stroke-dashoffset="100"/>
+            <g id="ticks"></g>
+            <g class="needle" id="gNeedle" style="transform: rotate(-90deg)"><path d="M100 100 L100 42" stroke="#ffb547" stroke-width="3" stroke-linecap="round"/><circle cx="100" cy="100" r="7" fill="#eef2f7"/></g>
+          </svg>
+          <div class="readout"><div class="pct num" id="gPct">--%</div></div>
+        </div>
+        <div class="split num"><span>Work <b id="kmWork">–</b></span><span>Total <b id="kmTotal">–</b></span></div>
+      </div>
+      <div>
+        <h2>Odometer</h2>
+        <div class="odo-row"><div class="odo num" id="odo" aria-label="Odometer"></div><span class="odo-unit" id="odoUnit">km</span></div>
+        <div class="trip" id="trip" data-on="false"><i class="lamp"></i><div><div class="t1" id="tripT1">Parked</div><div class="t2" id="tripT2">Say "start a work trip to…" when you leave.</div></div></div>
+        <div class="lights" id="lights"></div>
+      </div>
+      <div>
+        <h2>12-week logbook</h2>
+        <div class="big num" id="day">– <small></small></div>
+        <div class="weeks" id="weeks"></div>
+        <div class="sub num" id="trips">–</div>
+        <div class="car" id="car"><b>No logbook linked yet</b>Link your account to see it here.</div>
+      </div>
+    </div>
+
+    <div class="card console" id="console" data-state="idle">
+      <div class="micwrap">
+        <div class="spin"></div>
+        <button type="button" id="mic" title="Tap to talk; tap again to send" aria-pressed="false">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0M12 17v5M8 22h8"/></svg>
+        </button>
+        <div class="miclabel" id="micLabel">Tap to talk</div>
+      </div>
+      <div>
+        <div class="screen" id="screen" data-confirm="false">
+          <div class="wave" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
+          <div class="heard" id="heard"></div>
+          <div class="reply" id="reply"><span class="hint">Tap the mic and say "How's my logbook going?"</span></div>
+          <div class="confirm">
+            <button class="primary" data-say="Confirm">Confirm</button>
+            <button data-say="Cancel">Cancel</button>
+          </div>
+          <div class="view" id="view"></div>
+          <div class="caption" id="caption"></div>
+        </div>
+        <form class="controls" id="form">
+          <input type="text" id="input" placeholder="Or type what you'd say…" autocomplete="off">
+          <button type="submit" id="send">Send</button>
+          <button type="button" id="speak" aria-pressed="true" title="Speak replies aloud">🔊</button>
+          <button type="button" id="reset" title="Start a new conversation">↺</button>
+        </form>
+        <div class="chips">
+          <button data-say="How's my logbook going?">How's my logbook going?</button>
+          <button data-say="Start a work trip to Torquay.">Start a work trip to Torquay</button>
+          <button data-say="List my last few trips.">List my last few trips</button>
+          <button data-say="Export my logbook for my accountant.">Export my logbook</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <aside>
+    <div class="card">
+      <h2>Conversation &amp; MCP calls</h2>
+      <div class="log" id="log"></div>
+    </div>
+    <div class="card">
+      <details class="toolbox"><summary>Odobook's MCP tools <span id="toolCount"></span></summary><div class="tools" id="tools"></div></details>
+    </div>
+  </aside>
+</main>
+<p class="disclaimer">
+  Built on the unofficial, community <a href="https://github.com/AlSayedGamal/mcp-voice-simulator">mcp-voice-simulator</a> as an Alexa+ stand-in.
+  Not affiliated with or endorsed by Amazon; the Alexa+ MCP Toolkit is
+  <a href="https://developer.amazon.com/docs/alexaplus/add-ons/home.html">restricted to select partners</a>.
+  The cluster reads Odobook's read-only <code>logbook_status</code> and <code>list_trips</code> tools.
+</p>
+
+<script type="module">
+import { createSpeaker } from "/tts.js";
+
+const $ = (id) => document.getElementById(id);
+const screen = $("screen"), input = $("input"), send = $("send"), consoleEl = $("console");
+let speakReplies = true;
+let ttsNote = ""; // why the server voice fell back to the browser voice, if it did
+let uiStatus = { enabled: false }; // MCP Apps view support, from /api/status
+let hostModule = null; // /host.js, loaded the first time a view is shown
+let mountedView = null;
+let busy = false;
+let linked = false;
+
+const MIC_LABEL = { idle: "Tap to talk", listening: "Listening… tap to send", thinking: "Thinking…" };
+const setState = (state) => { consoleEl.dataset.state = state; $("micLabel").textContent = MIC_LABEL[state] ?? ""; };
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+// ---- the instrument cluster
+const fmt = (n) => Number(n).toLocaleString("en-AU");
+(() => { // gauge ticks every 10%
+  let t = "";
+  for (let i = 0; i <= 10; i++) {
+    const a = Math.PI * (1 - i / 10), r1 = i % 5 ? 64 : 60, r2 = 70;
+    t += `<line class="tick" x1="${100 + r1 * Math.cos(a)}" y1="${100 - r1 * Math.sin(a)}" x2="${100 + r2 * Math.cos(a)}" y2="${100 - r2 * Math.sin(a)}" stroke-width="${i % 5 ? 1 : 2}"/>`;
+  }
+  $("ticks").innerHTML = t;
+  $("weeks").innerHTML = Array.from({ length: 12 }, (_, i) => `<i style="--i:${i}"></i>`).join("");
+})();
+
+function setOdometer(value) {
+  const digits = value == null ? "------" : String(Math.max(0, Math.round(value))).padStart(6, "0");
+  const odo = $("odo");
+  if (odo.children.length !== digits.length + 1) {
+    odo.innerHTML = [...digits].map((_, i) =>
+      (i === digits.length - 3 ? '<span class="sep">,</span>' : "") +
+      `<span class="d"><span class="col">${"0123456789-".split("").map((c) => `<span>${c}</span>`).join("")}</span></span>`).join("");
+  }
+  odo.querySelectorAll(".d .col").forEach((col, i) => {
+    const c = digits[i], idx = c === "-" ? 10 : Number(c);
+    col.style.transform = `translateY(${-idx * 1.2}em)`;
+  });
+  odo.setAttribute("aria-label", value == null ? "Odometer unknown" : `Odometer ${fmt(value)}`);
+}
+setOdometer(null);
+
+function setGauge(pct) {
+  const p = pct == null ? 0 : Math.max(0, Math.min(100, pct));
+  $("gFill").style.strokeDashoffset = String(100 - p);
+  $("gNeedle").style.transform = `rotate(${-90 + p * 1.8}deg)`;
+  $("gPct").textContent = pct == null ? "--%" : `${Math.round(p)}%`;
+}
+
+async function viewCall(name, args = {}) {
+  try {
+    const res = await fetch("/api/ui/tool-call", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name, arguments: args }) });
+    if (!res.ok) return null;
+    return (await res.json()).result?.structuredContent ?? null;
+  } catch { return null; }
+}
+
+let dashBusy = false;
+async function loadDashboard() {
+  if (!linked || dashBusy) return;
+  dashBusy = true;
+  try {
+    const [st, lt] = await Promise.all([viewCall("logbook_status"), viewCall("list_trips", { limit: 10 })]);
+    if (!st?.period) {
+      setGauge(null); setOdometer(null);
+      $("car").innerHTML = "<b>No logbook yet</b>Say \"start a logbook for my car\".";
+      $("day").innerHTML = "– <small></small>"; $("trips").textContent = ""; $("lights").replaceChildren();
+      $("weeks").querySelectorAll("i").forEach((w) => w.style.setProperty("--f", 0));
+      return;
+    }
+    const unit = st.unit ?? "km";
+    setGauge(st.businessPct);
+    $("kmWork").textContent = `${fmt(st.businessDistance)} ${unit}`;
+    $("kmTotal").textContent = `${fmt(st.totalDistance)} ${unit}`;
+    $("odoUnit").textContent = unit;
+
+    // The current odometer: the running trip's start, or the newest reading on a recent trip.
+    const trips = lt?.trips ?? [];
+    const readings = trips.flatMap((t) => [t.endOdometer, t.startOdometer]).filter((n) => typeof n === "number");
+    if (st.activeTrip?.startOdometer != null) readings.push(st.activeTrip.startOdometer);
+    setOdometer(readings.length ? Math.max(...readings) : null);
+
+    const a = st.activeTrip;
+    $("trip").dataset.on = String(Boolean(a));
+    $("tripT1").textContent = a ? `Trip running${a.destination ? ` to ${a.destination}` : ""}` : "Parked";
+    $("tripT2").textContent = a
+      ? `${a.kind === "private" ? "Private" : a.kind === "business" ? "Work" : "Unlabelled"} · since ${a.start}${a.startOdometer != null ? ` · from ${fmt(a.startOdometer)} ${unit}` : ""}`
+      : "Say \"start a work trip to…\" when you leave.";
+
+    const { daysElapsed: d, daysLeft: left } = st.period;
+    const total = d != null && left != null ? d + left : 84;
+    $("day").innerHTML = st.jurisdiction === "AU" ? `Day ${d} <small>of ${total} · ${left} to go</small>` : `${left} <small>days left in the year</small>`;
+    $("weeks").querySelectorAll("i").forEach((w, i) => w.style.setProperty("--f", Math.max(0, Math.min(1, (d - i * 7) / 7))));
+    $("trips").textContent = `${st.trips} ${st.trips === 1 ? "trip" : "trips"} logged`;
+    $("car").innerHTML = `<b>${esc(st.car)}</b>${st.jurisdiction === "AU" ? "ATO 12-week logbook" : "IRS mileage log"} · ${esc(dateRange(st.period.start, st.period.end))}`;
+
+    const lights = (st.warnings ?? []).map((w) => `<span class="light" title="${esc(w)}">⚠ ${esc(shortWarning(w))}</span>`);
+    $("lights").innerHTML = lights.length ? lights.join("") : '<span class="light okl">✓ Records complete</span>';
+  } finally {
+    dashBusy = false;
+  }
+}
+const dateRange = (a, b) => {
+  const d = (s) => new Date(`${s}T12:00:00`);
+  const short = { day: "numeric", month: "short" };
+  return `${d(a).toLocaleDateString("en-AU", short)} – ${d(b).toLocaleDateString("en-AU", { ...short, year: "numeric" })}`;
+};
+const shortWarning = (w) =>
+  /no odometer/i.test(w) ? `${w.match(/^\d+/)?.[0] ?? ""} missing odometer`.trim()
+  : /late/i.test(w) ? `${w.match(/^\d+/)?.[0] ?? ""} late entry`.trim()
+  : /clearer purpose/i.test(w) ? "Vague purpose"
+  : /30 June/i.test(w) ? "Crosses 30 June"
+  : /12 hours/i.test(w) ? "Trip still running"
+  : w;
+
+// ---- linking (unchanged behaviour: the page polls so the link and its countdown stay current)
+let countdown = null, poll = null;
+let linkShown = null; // which login (link + expiry) is on screen, so polling doesn't rebuild the button under the cursor
+const stopLinkTimers = () => { clearInterval(countdown); clearTimeout(poll); countdown = poll = linkShown = null; };
+const span = (text, cls = "") => { const el = document.createElement("span"); el.textContent = text; if (cls) el.className = cls; return el; };
+const statusDot = (kind) => { const el = document.createElement("i"); el.className = kind ? `dot ${kind}` : "dot"; return el; };
+const clock = (ms) => `${Math.floor(ms / 60000)}:${String(Math.floor(ms / 1000) % 60).padStart(2, "0")}`;
+
+function showLinking(s) {
+  poll = setTimeout(loadStatus, 1500);
+  const shown = `${s.linkUrl}|${s.linkExpiresAt}`;
+  if (shown === linkShown) return;
+  linkShown = shown;
+  const waiting = span("Waiting for you to link Odobook", "pill");
+  waiting.prepend(statusDot());
+  const parts = [waiting];
+  if (s.linkUrl) {
+    const open = document.createElement("a");
+    open.className = "linkbtn"; open.href = s.linkUrl; open.target = "_blank"; open.rel = "noopener noreferrer";
+    open.textContent = "Link account ↗";
+    parts.push(open);
+  } else {
+    parts.push(span("Open the login link printed in the terminal."));
+  }
+  const left = span("");
+  parts.push(left);
+  $("status").replaceChildren(...parts);
+
+  const expires = Date.parse(s.linkExpiresAt);
+  const tick = () => { const ms = expires - Date.now(); left.textContent = ms > 0 ? `Expires in ${clock(ms)}` : "Expiring…"; };
+  tick();
+  clearInterval(countdown);
+  countdown = setInterval(tick, 1000);
+}
+
+function showLinkFailed(s) {
+  const retry = document.createElement("button");
+  retry.textContent = "Try again";
+  retry.addEventListener("click", async () => {
+    retry.disabled = true;
+    await fetch("/api/relink", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+    loadStatus();
+  });
+  const bad = span(s.linkTimedOut ? "Login timed out" : "Login failed", "pill");
+  bad.prepend(statusDot("bad"));
+  $("status").replaceChildren(bad, span(s.error ?? ""), retry);
+}
+
+async function loadStatus() {
+  clearTimeout(poll);
+  const s = await (await fetch("/api/status")).json();
+  if (!s.linking) stopLinkTimers();
+  const wasLinked = linked;
+  linked = Boolean(s.linked);
+  if (s.linking) showLinking(s);
+  else if (s.linkFailed) showLinkFailed(s);
+  else $("status").innerHTML = s.linked
+    ? `<span class="pill"><i class="dot ok"></i>Odobook linked</span>` +
+      `<span class="host" title="${esc(s.mcpUrl)}">${esc(new URL(s.mcpUrl ?? "http://x").host)}</span>` +
+      `<span class="brain">Brain: ${esc(s.brain ?? "")}</span>` +
+      (ttsNote ? `<span><i class="dot bad"></i> ${esc(ttsNote)}</span>` : "")
+    : `<span class="pill"><i class="dot bad"></i>Not connected</span><span>${esc(s.error ?? "")}</span>`;
+  speaker.setProvider(s.tts?.name ?? "browser");
+  uiStatus = s.ui ?? { enabled: false };
+  $("tools").innerHTML = (s.tools ?? []).map((t) => `<span title="${esc(t.description)}">${esc(t.name)}</span>`).join("");
+  $("toolCount").textContent = s.tools?.length ? `(${s.tools.length})` : "";
+  if (linked && !wasLinked) loadDashboard();
+}
+
+// The mic must never hear the simulator's own spoken reply: that would turn the reply
+// into a new utterance, which gets answered, which the mic hears again, forever.
+let rec = null;
+let lastReply = "";
+let quietUntil = 0; // ignore recognition results until this timestamp (ms)
+
+const normalize = (s) => s.toLowerCase().replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
+const isEcho = (heard) => {
+  const h = normalize(heard);
+  return h.length > 0 && normalize(lastReply).includes(h);
+};
+
+const speaker = createSpeaker({
+  onStart: () => { rec?.abort(); quietUntil = Infinity; },
+  onEnd: () => { quietUntil = Date.now() + 1500; },
+  onProblem: (err) => { ttsNote = `${err.message} Using the browser voice instead.`; loadStatus(); },
+});
+
+function speak(text) {
+  lastReply = text;
+  speaker.speak(text);
+}
+
+function callDetails(t) {
+  const tag = t.origin === "view" ? " <span class=\"ms\">from view</span>" : "";
+  return `<details><summary class="${t.isError ? "error" : ""}">${esc(t.tool)}${tag} <span class="ms">${t.ms} ms</span></summary>` +
+    `<pre>${esc(JSON.stringify(t.args))}\n→ ${esc(t.text)}</pre></details>`;
+}
+
+function appendLog(html) {
+  const el = document.createElement("div");
+  el.className = "turn";
+  el.innerHTML = html;
+  $("log").append(el);
+  $("log").scrollTop = $("log").scrollHeight;
+}
+
+const logNote = (text, warn = true) => appendLog(`<div class="note${warn ? " warn" : ""}">${esc(text)}</div>`);
+const logViewCall = (trace) => trace && appendLog(callDetails(trace));
+const logCsp = ({ directive, blockedUri }) =>
+  logNote(`The view broke its Content-Security-Policy: "${directive}" blocked ${blockedUri || "an inline resource"}.`, blockedUri !== "eval");
+
+function logTurn(utterance, data, opts = {}) {
+  const calls = (data.trace ?? []).map(callDetails).join("");
+  const notes = (data.uiWarnings ?? []).map((w) => `<div class="note warn">${esc(w)}</div>`).join("");
+  appendLog(`<div class="you">${opts.fromView ? "(from a view) " : ""}${esc(utterance)}</div><div class="said">${esc(data.reply ?? data.error ?? "")}</div>${calls}${notes}`);
+}
+
+function showReply(text) {
+  const el = $("reply");
+  el.classList.remove("fresh"); void el.offsetWidth; el.classList.add("fresh");
+  el.textContent = text;
+}
+
+// ---- MCP Apps views: the page is the host (the protocol lives in /host.js).
+async function clearView() {
+  screen.dataset.ui = "false";
+  const view = mountedView;
+  mountedView = null;
+  await view?.destroy();
+  $("view").replaceChildren();
+}
+
+async function showView(ui, reply) {
+  await clearView();
+  if (!ui || !uiStatus.enabled || !uiStatus.sandboxOrigin) return;
+  try {
+    hostModule ??= await import("/host.js");
+    const handlers = hostModule.createHostHandlers({
+      fetchImpl: (...args) => fetch(...args),
+      say: (text) => say(text, { fromView: true }),
+      onViewCall: logViewCall,
+      confirmOpen: (url) => confirm(`This view wants to open:\n${url}`),
+      openWindow: (url) => window.open(url, "_blank", "noopener,noreferrer"),
+    });
+    $("caption").textContent = reply ?? "";
+    screen.dataset.ui = "true";
+    mountedView = await hostModule.mountView({
+      container: $("view"),
+      ui,
+      sandboxOrigin: uiStatus.sandboxOrigin,
+      handlers,
+      maxHeight: Math.max(120, $("view").clientHeight),
+      onCspViolation: logCsp,
+      onProblem: (message) => logNote(message),
+    });
+  } catch (err) {
+    logNote(`Could not show the view for "${ui.tool}": ${err.message}`);
+    await clearView();
+  }
+}
+
+async function say(utterance, opts = {}) {
+  utterance = utterance.trim();
+  if (!utterance) return;
+  if (busy) {
+    if (opts.fromView) logNote("A view sent a message while a turn was still running, so it was dropped.");
+    return;
+  }
+  busy = true; send.disabled = true;
+  $("heard").textContent = `“${utterance}”`;
+  setState("thinking");
+  try {
+    const res = await fetch("/api/turn", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ utterance }) });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error);
+    showReply(data.reply);
+    screen.dataset.confirm = String(data.awaitingConfirm);
+    logTurn(utterance, data, opts);
+    speak(data.reply);
+    await showView(data.ui, data.reply);
+  } catch (err) {
+    showReply("Sorry, something went wrong.");
+    logTurn(utterance, { error: err.message }, opts);
+    screen.dataset.confirm = "false";
+    await clearView();
+  } finally {
+    busy = false; send.disabled = false; setState("idle");
+    input.value = "";
+    await loadStatus();
+    loadDashboard();
+  }
+}
+
+$("form").addEventListener("submit", (e) => { e.preventDefault(); say(input.value); });
+document.addEventListener("click", (e) => {
+  const phrase = e.target.closest("[data-say]")?.dataset.say;
+  if (phrase) say(phrase);
+});
+$("speak").addEventListener("click", (e) => {
+  speakReplies = !speakReplies;
+  e.currentTarget.setAttribute("aria-pressed", String(speakReplies));
+  speaker.setEnabled(speakReplies);
+});
+$("reset").addEventListener("click", async () => {
+  speaker.cancel();
+  await clearView();
+  await fetch("/api/reset", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+  $("log").innerHTML = ""; $("heard").textContent = "";
+  $("reply").innerHTML = '<span class="hint">Tap the mic and say "How\'s my logbook going?"</span>';
+  screen.dataset.confirm = "false";
+  loadDashboard();
+});
+
+// Voice input (Chrome/Edge/Safari expose SpeechRecognition; others fall back to typing)
+// One utterance per mic press, but it keeps listening through short pauses (people pause
+// mid-number: "odometer... 52,394"). It's sent after SILENCE_MS of quiet, or when the mic
+// is tapped again. We never re-arm on our own.
+const SILENCE_MS = 2000;
+const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+if (Recognition) {
+  rec = new Recognition();
+  // The browser's language by default, so non-US English (and other languages) are heard
+  // as spoken; ?lang=en-GB etc. overrides it.
+  rec.lang = new URLSearchParams(location.search).get("lang") || navigator.language || "en-US";
+  rec.continuous = true;
+  rec.interimResults = true;
+  let listening = false;
+  let finals = [];    // the recognised (final) pieces of this utterance so far
+  let silenceTimer = 0;
+  const joined = (parts) => parts.join(" ").replace(/\s+/g, " ").trim();
+  rec.onstart = () => { listening = true; finals = []; setState("listening"); $("mic").setAttribute("aria-pressed", "true"); };
+  rec.onend = () => {
+    clearTimeout(silenceTimer);
+    listening = false;
+    $("mic").setAttribute("aria-pressed", "false");
+    const heard = joined(finals);
+    finals = [];
+    if (!heard || busy || Date.now() < quietUntil || isEcho(heard)) { // nothing said, our own spoken reply, or a stale result
+      if (!busy) { setState("idle"); $("heard").textContent = ""; }
+      return;
+    }
+    say(heard);
+  };
+  rec.onresult = (e) => {
+    clearTimeout(silenceTimer);
+    silenceTimer = setTimeout(() => { if (listening) rec.stop(); }, SILENCE_MS);
+    finals = [];
+    let interim = "";
+    for (let i = 0; i < e.results.length; i++) { // a SpeechRecognitionResultList isn't iterable everywhere
+      if (e.results[i].isFinal) finals.push(e.results[i][0].transcript);
+      else interim += e.results[i][0].transcript;
+    }
+    if (!busy) $("heard").textContent = joined([...finals, interim]); // show it as it's heard
+  };
+  $("mic").addEventListener("click", () => {
+    if (listening) { rec.stop(); return; } // second tap: done talking, send it now
+    speaker.cancel();
+    quietUntil = 0;
+    try { rec.start(); } catch { /* already starting */ }
+  });
+} else {
+  $("mic").disabled = true;
+  $("mic").title = "Speech recognition isn't supported in this browser";
+  $("micLabel").textContent = "Type below";
+}
+
+input.focus();
+loadStatus();
+</script>
+</body>
+</html>

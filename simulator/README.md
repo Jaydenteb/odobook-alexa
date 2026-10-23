@@ -38,6 +38,7 @@ In this setup:
 | --- | --- |
 | `bedrock-brain.mjs` | `createBedrockBrain()`, which implements the simulator's `Brain` interface on the Converse API. |
 | `run.mjs` | Launcher: `createServer()` + `McpSessionManager` + the brain chosen by `SIM_BRAIN`. |
+| `public/index.html` | Odobook's page for the simulator ("Odobook Drive"): the package's page logic with an instrument cluster (business-use gauge, odometer, trip light, 12-week progress, warning lights). The cluster reads the read-only `logbook_status` and `list_trips` tools through the simulator's view tool-call route, never through the brain, so it doesn't touch the conversation. `run.mjs` copies the package's `tts.js` and `host.js` in beside it at startup. |
 | `test/bedrock-brain.test.mjs` | Unit tests that use a mocked Bedrock client and MCP session (`node --test`). No AWS calls. |
 | `package.json` | This folder's own pinned dependencies. The Worker's root `package.json` is separate. |
 

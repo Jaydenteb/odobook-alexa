@@ -5,3 +5,5 @@ node_modules/
 *.log
 __pycache__/
 .venv/
+simulator/public/tts.js
+simulator/public/host.js

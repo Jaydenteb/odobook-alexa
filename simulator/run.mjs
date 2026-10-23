@@ -10,6 +10,9 @@ import {
   createElevenLabsTts,
   createServer,
 } from "mcp-voice-simulator";
+import { copyFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { DEFAULT_MODEL_ID, DEFAULT_REGION, createBedrockBrain } from "./bedrock-brain.mjs";
 
 function env(name) {
@@ -75,7 +78,13 @@ if ((env("SIM_TTS") ?? "browser").toLowerCase() === "elevenlabs") {
   tts = createElevenLabsTts({ apiKey, voiceId, modelId: env("ELEVENLABS_MODEL") });
 }
 
-createServer({ sessionManager, brain, port, tts, ui: uiEnabled ? {} : false });
+// Odobook's own page (public/index.html, with the instrument cluster) replaces the package's.
+// The page still loads the package's tts.js and host.js, so copy those in from the installed version.
+const publicDir = join(dirname(fileURLToPath(import.meta.url)), "public");
+const packagePublic = join(dirname(fileURLToPath(import.meta.resolve("mcp-voice-simulator"))), "..", "public");
+for (const file of ["tts.js", "host.js"]) copyFileSync(join(packagePublic, file), join(publicDir, file));
+
+createServer({ sessionManager, brain, port, tts, ui: uiEnabled ? {} : false, publicDir });
 
 console.log(`odobook-voice-sim: http://127.0.0.1:${port}`);
 console.log(`  MCP server: ${mcpUrl}`);
