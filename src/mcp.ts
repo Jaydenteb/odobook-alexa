@@ -356,9 +356,11 @@ export function createServer(env: Env, props: Props, scopes: string[] = ["logboo
       title: "Log a past trip",
       description:
         "Record a trip that already happened (forgot to start it, or entering from notes). " +
-        "Trips entered more than a day after they happened are marked late, as the ATO expects.",
+        "Trips entered more than a day after they happened are marked late, as the ATO expects. " +
+        'For a relative day ("yesterday", "the day before yesterday") pass days_ago instead of guessing a calendar date.',
       inputSchema: {
-        date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).describe("Day of the trip, YYYY-MM-DD"),
+        date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe("Day of the trip, YYYY-MM-DD, if the driver gave a date"),
+        days_ago: z.number().int().min(0).max(400).optional().describe("Days before today in the logbook's time zone: 1 = yesterday, 2 = the day before"),
         kind: z.enum(["business", "private"]),
         purpose: z.string().max(200).optional(),
         destination: z.string().max(200).optional(),
@@ -373,11 +375,14 @@ export function createServer(env: Env, props: Props, scopes: string[] = ["logboo
       const lb = await openLogbook(env, userId);
       if (!lb) return NO_LOGBOOK;
       const locale = DEFAULTS[lb.jurisdiction].locale;
-      if (a.date < lb.start_date || a.date > lb.planned_end) {
+      const today = localDate(new Date(), lb.time_zone);
+      const date =
+        a.date ?? (a.days_ago != null ? new Date(Date.parse(`${today}T12:00:00Z`) - a.days_ago * 86_400_000).toISOString().slice(0, 10) : null);
+      if (!date) return refuse("Which day was the trip?");
+      if (date < lb.start_date || date > lb.planned_end) {
         return refuse(`That date is outside this logbook, which runs ${fmtDate(lb.start_date, locale)} to ${fmtDate(lb.planned_end, locale)}.`);
       }
-      const today = localDate(new Date(), lb.time_zone);
-      if (a.date > today) return refuse("That date is in the future.");
+      if (date > today) return refuse("That date is in the future.");
       if (a.kind === "business" && isVaguePurpose(a.purpose)) {
         return refuse('What was the trip for? It needs a specific purpose, not just "business".');
       }
@@ -391,7 +396,7 @@ export function createServer(env: Env, props: Props, scopes: string[] = ["logboo
         return refuse("How far was it? Give the start and end odometer, or the distance.");
       }
       // Local wall-clock time to UTC: find the zone's offset at that moment, then shift.
-      const wall = Date.parse(`${a.date}T${a.start_time ?? "12:00"}:00Z`);
+      const wall = Date.parse(`${date}T${a.start_time ?? "12:00"}:00Z`);
       const zoned = Date.parse(
         new Date(wall).toLocaleString("sv-SE", { timeZone: lb.time_zone }).replace(" ", "T") + "Z",
       );
@@ -405,7 +410,7 @@ export function createServer(env: Env, props: Props, scopes: string[] = ["logboo
       )
         .bind(id, lb.id, userId, startedAt, startedAt, a.start_odometer ?? null, a.end_odometer ?? null, distance, a.kind, a.purpose?.trim() || null, a.destination?.trim() || null, now, late)
         .run();
-      let text = `Logged a ${fmtDistance(distance, lb.unit, locale)} ${a.kind} trip on ${fmtDate(a.date, locale)}.`;
+      let text = `Logged a ${fmtDistance(distance, lb.unit, locale)} ${a.kind} trip on ${fmtDate(date, locale)}.`;
       if (late) text += " It's marked as a late entry.";
       if (lb.jurisdiction === "AU" && a.kind === "business" && (a.start_odometer == null || a.end_odometer == null)) {
         text += " Add the odometer readings if you have them; the ATO asks for them.";

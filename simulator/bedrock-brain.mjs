@@ -34,6 +34,16 @@ export function toSpeech(text) {
     .trim();
 }
 
+/**
+ * Today's date for the system prompt. A real voice host always knows the date; without it the model
+ * guesses, and "yesterday" became 4 June 2024 in testing. Uses this machine's time zone.
+ */
+export function todayLine(now = new Date()) {
+  const day = now.toLocaleDateString("en-AU", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+  const iso = new Date(now.getTime() - now.getTimezoneOffset() * 60_000).toISOString().slice(0, 10);
+  return `Today is ${day} (${iso}).`;
+}
+
 // Amazon Nova 2 Lite through the global cross-Region inference profile (the only route to Nova 2
 // Lite from Sydney). Tested live 20 Oct 2026: Converse tool use works. Override with BEDROCK_MODEL_ID.
 export const DEFAULT_MODEL_ID = "global.amazon.nova-2-lite-v1:0";
@@ -164,7 +174,9 @@ export function createBedrockBrain(options) {
             response = await client.send(
               new ConverseCommand({
                 modelId,
-                system: [{ text: systemPrompt }],
+                system: [{ text: `${systemPrompt}
+
+${todayLine()}` }],
                 messages: history,
                 ...(toolConfig ? { toolConfig } : {}),
                 inferenceConfig: { maxTokens },

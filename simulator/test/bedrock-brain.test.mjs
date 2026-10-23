@@ -144,7 +144,9 @@ describe("createBedrockBrain turn loop", () => {
     assert.equal(bedrock.calls.length, 2);
     const [first, second] = bedrock.calls;
     assert.equal(first.modelId, DEFAULT_MODEL_ID);
-    assert.deepEqual(first.system, [{ text: DEFAULT_SYSTEM_PROMPT }]);
+    assert.equal(first.system.length, 1);
+    assert.ok(first.system[0].text.startsWith(DEFAULT_SYSTEM_PROMPT));
+    assert.match(first.system[0].text, /Today is \w+day .+ \(\d{4}-\d{2}-\d{2}\)\.$/);
     assert.equal(first.toolConfig.tools[0].toolSpec.name, "log_trip");
     assert.ok(first.inferenceConfig.maxTokens > 0);
     assert.deepEqual(first.messages, [{ role: "user", content: [{ text: "log 42 k for a client visit" }] }]);
